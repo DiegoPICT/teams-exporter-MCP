@@ -1,8 +1,11 @@
 # teams-chat-gw-bridge-mcp
 
-Local WebSocket bridge for Teams Chat Exporter and upcoming MCP adapter integration.
+Local bridge service for Teams Chat Exporter, with a strict separation between:
 
-This repository contains a working Phase 1 bridge plus initial Phase 2 protocol skeleton handlers.
+- southbound extension WebSocket transport
+- northbound app/API verb interface
+
+This repository currently has Phase 1 and Phase 2 completed, and is preparing Phase 3 real streaming integration.
 
 ## Current Status
 
@@ -12,11 +15,14 @@ This repository contains a working Phase 1 bridge plus initial Phase 2 protocol 
 - Canonical logging is enabled to console and `log/bridge.log`.
 - Canonical frame helper is in place for consistent protocol envelopes.
 
-## Protocol Reference
+## Documentation Map
 
-- Bridge design: `WEBSOCKET_BRIDGE_MCP_DESIGN.md`
-- Implementation plan and progress: `IMPLEMENTATION.md`
-- Architecture plan: `DESIGN.md`
+- `README.md`: project quickstart and document index
+- `DESIGN.md`: architecture overview (high level)
+- `SOUTHBOUND.md`: extension-facing WebSocket interface boundary
+- `NORTHBOUND.md`: app/API-facing verb interface boundary
+- `WEBSOCKET_BRIDGE_MCP_DESIGN.md`: protocol-level contract details
+- `IMPLEMENTATION.md`: phased delivery status and backlog
 
 ## Quick Start
 
@@ -63,8 +69,8 @@ Expected Phase 1 lifecycle events include:
 Standalone local emulators are available:
 
 - Extension emulator: `testing/emulate_extension.py`
-- Consumer emulator: `testing/emulate_consumer.py`
 - Phase 2 smoke check: `testing/smoke_phase2.py`
+- Legacy Phase 2 consumer-over-websocket script: `testing/emulate_consumer.py` (transitional only)
 
 Usage guide:
 
@@ -72,16 +78,18 @@ Usage guide:
 
 ## Repository Layout
 
-- `bridge.py`: FastAPI WebSocket server and Phase 1 session lifecycle
+- `bridge.py`: current FastAPI runtime (phase-1/phase-2 implementation)
 - `frame_helper.py`: canonical frame builder utilities
 - `logging_helper.py`: logger setup (console + rotating file)
 - `testing/`: local emulation scripts for extension and consumer behavior
+- `SOUTHBOUND.md`: southbound extension transport contract
+- `NORTHBOUND.md`: northbound app verb contract
 - `IMPLEMENTATION.md`: phased delivery plan and status
 - `DESIGN.md`: target architecture and data flow
 - `WEBSOCKET_BRIDGE_MCP_DESIGN.md`: protocol-level contract and semantics
 
-## Next Up (Phase 2)
+## Next Up (Phase 3)
 
-- Add status/health HTTP endpoints (`/health`, `/bridge/status`)
-- Expand placeholder handlers toward real extension data flow
-- Add automated smoke test coverage for protocol paths
+- Keep `/ws` strictly extension-facing and move app verbs to northbound endpoints
+- Replace snapshot placeholders with real pass-through stream handling
+- Expand end-to-end tests around extension emulator + northbound verb flows

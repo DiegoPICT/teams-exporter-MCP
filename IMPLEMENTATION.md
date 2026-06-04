@@ -2,6 +2,11 @@
 
 This document defines a phased implementation plan for the local WebSocket bridge and MCP-facing adapter described in `WEBSOCKET_BRIDGE_MCP_DESIGN.md`.
 
+Interface boundary references:
+
+- Southbound extension transport: `SOUTHBOUND.md`
+- Northbound app/API verbs: `NORTHBOUND.md`
+
 Goal: move from "extension shows disconnected" to a stable, testable bridge that supports the v1 protocol and MCP tool mapping.
 
 ## Current Status
@@ -18,7 +23,7 @@ Implemented artifacts:
 - `.gitignore`: excludes `.venv`, caches, and local `.env`.
 - `logging_helper.py` and `log/`: canonical structured logging to console and rotating file (`log/bridge.log`).
 - `testing/emulate_extension.py`: local extension behavior emulator.
-- `testing/emulate_consumer.py`: local consumer verb-flow emulator.
+- `testing/emulate_consumer.py`: legacy phase-2 consumer-over-websocket emulator (transitional).
 - `testing/smoke_phase2.py`: automated Phase 2 websocket smoke checks.
 
 Verified runtime behavior:
@@ -29,7 +34,7 @@ Verified runtime behavior:
 - Disconnects and reconnects are handled cleanly (`code=1001` observed during manual testing).
 - Dev hot-reload is enabled for local iteration (`python -m bridge` uses Uvicorn reload mode).
 - Source edits trigger graceful reload cycles with stop/start lifecycle events in `log/bridge.log`.
-- Phase 2 placeholders are runnable end-to-end through the consumer emulator (`LIST_CONVERSATIONS`, `START_SNAPSHOT`, `CANCEL`).
+- Phase 2 placeholders are runnable end-to-end through local emulators and smoke scripts.
 - Automated Phase 2 smoke checks validate handshake, BUSY semantics, cancel path, and idempotent cancel.
 
 Notes:
@@ -135,11 +140,11 @@ Status: completed and verified with local emulators and `testing/smoke_phase2.py
 
 ## Immediate Next Steps
 
-1. Expand `/bridge/status` into richer diagnostics and include operation timing fields.
-2. Replace snapshot placeholder with real streamed extension data flow.
-3. Add HTTP command endpoints for local non-MCP clients.
-4. Formalize operation lifecycle metrics/log fields for later MCP adapter integration.
-5. Start MCP adapter implementation on top of the shared bridge service layer.
+1. Enforce interface separation: keep `/ws` southbound-only and stop using it as a consumer verb channel.
+2. Extract core bridge service layer between southbound and northbound adapters.
+3. Add northbound command endpoints for local non-MCP clients.
+4. Replace snapshot placeholder with real streamed extension pass-through data flow.
+5. Formalize operation lifecycle metrics/log fields for later MCP adapter integration.
 
 Completed in this iteration:
 
@@ -150,6 +155,7 @@ Completed in this iteration:
 - Added standalone local testing scripts for extension and consumer emulation.
 - Added `GET /health` and `GET /bridge/status` endpoints for local observability.
 - Added malformed-frame handling that returns protocol error frames instead of immediately terminating active sessions.
+- Added explicit southbound/northbound interface docs (`SOUTHBOUND.md`, `NORTHBOUND.md`).
 
 ## Phase 3: Real Snapshot Streaming
 

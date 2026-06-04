@@ -2,6 +2,12 @@
 
 This document defines the target architecture for the Teams Chat Exporter bridge and MCP integration.
 
+Detailed interface contracts live in:
+
+- `SOUTHBOUND.md`
+- `NORTHBOUND.md`
+- `WEBSOCKET_BRIDGE_MCP_DESIGN.md`
+
 ## Goals
 
 - Keep one canonical bridge service for state and protocol logic.
@@ -44,18 +50,14 @@ flowchart LR
 ## Responsibilities by Layer
 
 - WebSocket adapter (`/ws`)
-  - Maintain extension socket lifecycle.
-  - Parse/emit protocol frames.
-  - Forward command/response handling into core service.
+  - Maintains extension socket lifecycle and frame I/O only.
+  - Is strictly southbound and extension-facing.
 - Core bridge service
-  - Own session state and operation state.
-  - Enforce single active operation and busy rules.
-  - Correlate by `requestId`.
-  - Normalize error mapping (`BUSY`, `CONTEXT_LOST`, `UNSUPPORTED`).
+  - Owns session/operation state, correlation, and lifecycle semantics.
+  - Is the boundary between southbound transport and northbound verbs.
 - HTTP API adapter
-  - Provide local control and observability endpoints.
-  - Offer command entrypoints for non-MCP clients.
-  - Provide streaming endpoint for snapshot events (SSE in Phase 3).
+  - Exposes northbound consumer verbs and observability endpoints.
+  - Must not reuse extension websocket contracts as app-facing contracts.
 - MCP adapter
   - Thin wrapper over core service methods.
   - Stream chunk outputs for snapshot operations.
@@ -79,13 +81,14 @@ flowchart LR
 ## Near-Term Implementation Path
 
 1. Extract core bridge service from transport logic.
-2. Route post-handshake commands through core service.
-3. Add `GET /health` and `GET /bridge/status`.
-4. Add placeholder Phase 2 command endpoints.
+2. Keep `/ws` southbound-only (extension-facing).
+3. Route app verbs through northbound endpoints into core service.
+4. Replace placeholders with real extension pass-through streaming.
 5. Add MCP adapter methods that call core service directly.
 
 ## Local Validation Harness
 
-- Consumer emulation script: `testing/emulate_consumer.py`
 - Extension emulation script: `testing/emulate_extension.py`
+- Phase 2 smoke script: `testing/smoke_phase2.py`
+- Legacy transitional script: `testing/emulate_consumer.py` (phase-2-only style)
 - Runbook: `testing/README.md`

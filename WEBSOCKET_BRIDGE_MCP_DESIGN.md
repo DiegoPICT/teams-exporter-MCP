@@ -4,6 +4,8 @@ Audience: developers implementing the local bridge and MCP-facing service that c
 
 This document is implementation-oriented and describes exactly how the bridge should interact with the extension in v1.
 
+This is the southbound protocol contract (bridge <-> extension). For app-facing verb boundaries, see `NORTHBOUND.md`.
+
 For extension-side constraints and scope guardrails, see `EXTENSION_WEBSOCKET_CONNECT.md`.
 
 ## 1) Transport and Session Model
