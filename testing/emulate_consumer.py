@@ -1,167 +1,136 @@
 #!/usr/bin/env python3
 import argparse
-import asyncio
 import json
 import time
-import uuid
+import urllib.error
+import urllib.parse
+import urllib.request
 from typing import Any
 
-import websockets
 
-
-PROTOCOL_VERSION = "teams-exporter-bridge/v1"
-
-
-def now_ms() -> int:
-    return int(time.time() * 1000)
-
-
-def make_hello() -> dict[str, Any]:
-    return {
-        "v": PROTOCOL_VERSION,
-        "type": "HELLO",
-        "sessionId": str(uuid.uuid4()),
-        "ts": now_ms(),
-        "payload": {
-            "protocol": PROTOCOL_VERSION,
-            "tabId": 999,
-            "conversationId": "consumer:test",
-            "conversationTitle": "Consumer Test",
-        },
-    }
-
-
-def make_frame(frame_type: str, request_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-    frame: dict[str, Any] = {
-        "v": PROTOCOL_VERSION,
-        "type": frame_type,
-        "requestId": request_id,
-        "ts": now_ms(),
-    }
+def request_json(method: str, url: str, payload: dict[str, Any] | None = None, timeout: float = 10.0) -> tuple[int, Any]:
+    data: bytes | None = None
+    headers = {"Accept": "application/json"}
     if payload is not None:
-        frame["payload"] = payload
-    return frame
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    req = urllib.request.Request(url=url, method=method, data=data, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode("utf-8")
+            return resp.status, json.loads(body) if body else None
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8")
+        parsed = json.loads(body) if body else {"error": exc.reason}
+        return exc.code, parsed
 
 
-def short(frame: dict[str, Any]) -> str:
-    return f"type={frame.get('type')} requestId={frame.get('requestId')} payload={frame.get('payload')} error={frame.get('error')}"
+def consume_sse(url: str, timeout: float, max_seconds: float) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    req = urllib.request.Request(url=url, method="GET", headers={"Accept": "text/event-stream"})
+    start = time.time()
+
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        for raw_line in resp:
+            line = raw_line.decode("utf-8").strip()
+            if not line or line.startswith(":"):
+                if time.time() - start > max_seconds:
+                    break
+                continue
+            if line.startswith("data: "):
+                payload = json.loads(line[len("data: ") :])
+                events.append(payload)
+                print(
+                    f"[consumer] sse type={payload.get('type')} requestId={payload.get('requestId')} payload={payload.get('payload')}"
+                )
+                if payload.get("type") in {"DONE", "ERROR"}:
+                    break
+            if time.time() - start > max_seconds:
+                break
+
+    return events
 
 
-async def recv_json(ws: websockets.ClientConnection, timeout: float) -> dict[str, Any]:
-    raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
-    if not isinstance(raw, str):
-        raise ValueError("received non-text frame")
-    data = json.loads(raw)
-    if not isinstance(data, dict):
-        raise ValueError("received non-object JSON frame")
-    return data
+def base_url(host: str, port: int) -> str:
+    return f"http://{host}:{port}"
 
 
-async def handshake(ws: websockets.ClientConnection, timeout: float) -> None:
-    hello = make_hello()
-    await ws.send(json.dumps(hello))
-    print("[consumer] tx HELLO")
-    ack = await recv_json(ws, timeout)
-    print(f"[consumer] rx {short(ack)}")
-    if ack.get("type") != "HELLO_ACK":
-        raise ValueError(f"expected HELLO_ACK, got {short(ack)}")
+def run_list(base: str, timeout: float) -> None:
+    status, body = request_json("GET", f"{base}/conversations", timeout=timeout)
+    print(f"[consumer] GET /conversations -> {status} {body}")
 
 
-async def run_list(ws: websockets.ClientConnection, timeout: float) -> None:
-    request_id = "req-list-1"
-    frame = make_frame("LIST_CONVERSATIONS", request_id)
-    await ws.send(json.dumps(frame))
-    print(f"[consumer] tx {short(frame)}")
-    response = await recv_json(ws, timeout)
-    print(f"[consumer] rx {short(response)}")
-
-
-async def run_snapshot(ws: websockets.ClientConnection, timeout: float) -> None:
-    request_id = "req-snap-1"
-    frame = make_frame(
-        "START_SNAPSHOT",
-        request_id,
+def run_snapshot(base: str, timeout: float, events_timeout: float) -> None:
+    status, body = request_json(
+        "POST",
+        f"{base}/snapshots",
         payload={
             "includeReplies": True,
             "includeReactions": True,
             "includeSystem": False,
         },
+        timeout=timeout,
     )
-    await ws.send(json.dumps(frame))
-    print(f"[consumer] tx {short(frame)}")
+    print(f"[consumer] POST /snapshots -> {status} {body}")
+    if status != 200 or not isinstance(body, dict):
+        return
 
-    started = await recv_json(ws, timeout)
-    print(f"[consumer] rx {short(started)}")
+    request_id = body.get("requestId")
+    if not isinstance(request_id, str):
+        return
 
-    done = await recv_json(ws, timeout + 5.0)
-    print(f"[consumer] rx {short(done)}")
-
-
-async def run_cancel(ws: websockets.ClientConnection, timeout: float, cancel_delay: float) -> None:
-    snapshot_request_id = "req-snap-cancel-1"
-    start_frame = make_frame("START_SNAPSHOT", snapshot_request_id)
-    await ws.send(json.dumps(start_frame))
-    print(f"[consumer] tx {short(start_frame)}")
-
-    started = await recv_json(ws, timeout)
-    print(f"[consumer] rx {short(started)}")
-
-    await asyncio.sleep(cancel_delay)
-
-    cancel_frame = make_frame("CANCEL", snapshot_request_id)
-    await ws.send(json.dumps(cancel_frame))
-    print(f"[consumer] tx {short(cancel_frame)}")
-
-    done = await recv_json(ws, timeout)
-    print(f"[consumer] rx {short(done)}")
+    consume_sse(f"{base}/snapshots/{urllib.parse.quote(request_id)}/events", timeout=timeout, max_seconds=events_timeout)
 
 
-async def run_consumer(url: str, timeout: float, mode: str, cancel_delay: float) -> None:
-    async with websockets.connect(url) as ws:
-        await handshake(ws, timeout=timeout)
+def run_cancel(base: str, timeout: float, cancel_delay: float, events_timeout: float) -> None:
+    status, body = request_json("POST", f"{base}/snapshots", payload={}, timeout=timeout)
+    print(f"[consumer] POST /snapshots -> {status} {body}")
+    if status != 200 or not isinstance(body, dict):
+        return
 
-        if mode in {"list", "all"}:
-            await run_list(ws, timeout=timeout)
+    request_id = body.get("requestId")
+    if not isinstance(request_id, str):
+        return
 
-        if mode in {"snapshot", "all"}:
-            await run_snapshot(ws, timeout=timeout)
-
-        if mode in {"cancel", "all"}:
-            await run_cancel(ws, timeout=timeout, cancel_delay=cancel_delay)
+    time.sleep(cancel_delay)
+    cancel_status, cancel_body = request_json(
+        "POST",
+        f"{base}/snapshots/{urllib.parse.quote(request_id)}/cancel",
+        timeout=timeout,
+    )
+    print(f"[consumer] POST /snapshots/{request_id}/cancel -> {cancel_status} {cancel_body}")
+    consume_sse(f"{base}/snapshots/{urllib.parse.quote(request_id)}/events", timeout=timeout, max_seconds=events_timeout)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Emulate a consumer issuing bridge app verbs.")
+    parser = argparse.ArgumentParser(description="Emulate northbound consumer behavior over HTTP endpoints")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--path", default="/ws")
-    parser.add_argument("--timeout", type=float, default=8.0)
-    parser.add_argument("--cancel-delay", type=float, default=0.25)
-    parser.add_argument(
-        "--mode",
-        choices=["list", "snapshot", "cancel", "all"],
-        default="all",
-        help="Which verb flows to test",
-    )
+    parser.add_argument("--timeout", type=float, default=10.0)
+    parser.add_argument("--events-timeout", type=float, default=30.0)
+    parser.add_argument("--cancel-delay", type=float, default=1.0)
+    parser.add_argument("--mode", choices=["status", "list", "snapshot", "cancel", "all"], default="all")
     return parser.parse_args()
-
-
-def ws_url(host: str, port: int, path: str) -> str:
-    normalized = path if path.startswith("/") else f"/{path}"
-    return f"ws://{host}:{port}{normalized}"
 
 
 def main() -> None:
     args = parse_args()
-    url = ws_url(args.host, args.port, args.path)
-    asyncio.run(
-        run_consumer(
-            url=url,
-            timeout=args.timeout,
-            mode=args.mode,
-            cancel_delay=args.cancel_delay,
-        )
-    )
+    base = base_url(args.host, args.port)
+
+    status, health = request_json("GET", f"{base}/health", timeout=args.timeout)
+    print(f"[consumer] GET /health -> {status} {health}")
+    status, bridge_status = request_json("GET", f"{base}/bridge/status", timeout=args.timeout)
+    print(f"[consumer] GET /bridge/status -> {status} {bridge_status}")
+
+    if args.mode in {"status"}:
+        return
+    if args.mode in {"list", "all"}:
+        run_list(base, timeout=args.timeout)
+    if args.mode in {"snapshot", "all"}:
+        run_snapshot(base, timeout=args.timeout, events_timeout=args.events_timeout)
+    if args.mode in {"cancel", "all"}:
+        run_cancel(base, timeout=args.timeout, cancel_delay=args.cancel_delay, events_timeout=args.events_timeout)
 
 
 if __name__ == "__main__":

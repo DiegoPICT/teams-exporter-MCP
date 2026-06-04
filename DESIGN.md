@@ -86,9 +86,15 @@ flowchart LR
 4. Replace placeholders with real extension pass-through streaming.
 5. Add MCP adapter methods that call core service directly.
 
+Current status:
+
+- Steps 1-4 are implemented in the current codebase.
+- Next major work is Step 5 (MCP adapter).
+
 ## Local Validation Harness
 
 - Extension emulation script: `testing/emulate_extension.py`
-- Phase 2 smoke script: `testing/smoke_phase2.py`
-- Legacy transitional script: `testing/emulate_consumer.py` (phase-2-only style)
+- Consumer emulation script: `testing/emulate_consumer.py`
+- Phase 3 smoke script: `testing/smoke_phase3.py`
+- Backward-compatible wrapper: `testing/smoke_phase2.py`
 - Runbook: `testing/README.md`

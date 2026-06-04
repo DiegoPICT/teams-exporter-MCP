@@ -23,7 +23,7 @@ Current observability endpoints:
 - `GET /health`
 - `GET /bridge/status`
 
-Planned command endpoints:
+Current command endpoints:
 
 - `GET /conversations`
 - `POST /snapshots`

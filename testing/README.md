@@ -9,9 +9,10 @@ Interface references:
 
 ## Scripts
 
-- `emulate_consumer.py`: legacy phase-2 script that sends verbs over websocket (transitional).
-- `emulate_extension.py`: acts like an extension peer and responds to bridge commands.
-- `smoke_phase2.py`: automated smoke checks for Phase 2 command semantics.
+- `emulate_consumer.py`: northbound consumer emulator over HTTP verbs.
+- `emulate_extension.py`: southbound extension peer emulator over WebSocket.
+- `smoke_phase3.py`: end-to-end smoke checks for separated northbound/southbound flow.
+- `smoke_phase2.py`: compatibility wrapper that runs phase-3 smoke checks.
 
 ## Common Setup
 
@@ -26,9 +27,7 @@ Keep the bridge running in one terminal. Run emulators from another terminal.
 
 ## Consumer Emulator
 
-Exercises local Phase 2 placeholder behavior over WebSocket (`LIST_CONVERSATIONS`, `START_SNAPSHOT`, `CANCEL`).
-
-Important: this script reflects the phase-2 transitional approach and is not the long-term northbound contract.
+Exercises northbound bridge behavior over HTTP (`/conversations`, `/snapshots`, `/snapshots/{requestId}/cancel`).
 
 ```bash
 python testing/emulate_consumer.py --mode all
@@ -43,25 +42,24 @@ Useful modes:
 
 ## Extension Emulator
 
-Simulates extension-side responses when the bridge acts as command sender.
+Simulates extension-side responses while the bridge sends southbound commands.
 
 ```bash
-python testing/emulate_extension.py --idle-timeout 20
+python testing/emulate_extension.py --idle-timeout 40 --chunk-delay 1 --chunk-count 3
 ```
 
-## Phase 2 Smoke Test
+## Phase 3 Smoke Test
 
 Runs a one-shot check for:
 
-- handshake (`HELLO` -> `HELLO_ACK`)
-- `LIST_CONVERSATIONS` placeholder
-- `START_SNAPSHOT` placeholder start event
-- `BUSY` behavior while snapshot is active
-- `CANCEL` completion
-- idempotent `CANCEL` when no snapshot is active
+- extension handshake and session binding
+- real northbound `GET /conversations` pass-through
+- snapshot stream events (`SNAPSHOT_STARTED` + `CHUNK`)
+- northbound busy response while snapshot is active
+- cancellation path to terminal `DONE(cancelled)`
 
 ```bash
-python testing/smoke_phase2.py
+python testing/smoke_phase3.py
 ```
 
 ## Important Notes
@@ -69,4 +67,4 @@ python testing/smoke_phase2.py
 - The bridge enforces one active session at a time.
 - If one emulator is connected, the second connection will be rejected with close code `1013`.
 - Use `log/bridge.log` to inspect bridge-side behavior during runs.
-- For Phase 3+, consumer/app verbs should move to northbound endpoints instead of using `/ws`.
+- `smoke_phase2.py` is retained only for backward-compatible command usage.

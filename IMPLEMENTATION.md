@@ -13,6 +13,7 @@ Goal: move from "extension shows disconnected" to a stable, testable bridge that
 
 Phase 1 is implemented and manually validated.
 Phase 2 is complete with the protocol router and placeholder command flows.
+Phase 3 is implemented with northbound-driven real pass-through streaming.
 
 Implemented artifacts:
 
@@ -23,8 +24,9 @@ Implemented artifacts:
 - `.gitignore`: excludes `.venv`, caches, and local `.env`.
 - `logging_helper.py` and `log/`: canonical structured logging to console and rotating file (`log/bridge.log`).
 - `testing/emulate_extension.py`: local extension behavior emulator.
-- `testing/emulate_consumer.py`: legacy phase-2 consumer-over-websocket emulator (transitional).
-- `testing/smoke_phase2.py`: automated Phase 2 websocket smoke checks.
+- `testing/emulate_consumer.py`: northbound consumer emulator over HTTP verbs.
+- `testing/smoke_phase3.py`: end-to-end phase-3 smoke checks.
+- `testing/smoke_phase2.py`: compatibility wrapper that runs phase-3 smoke checks.
 
 Verified runtime behavior:
 
@@ -34,8 +36,8 @@ Verified runtime behavior:
 - Disconnects and reconnects are handled cleanly (`code=1001` observed during manual testing).
 - Dev hot-reload is enabled for local iteration (`python -m bridge` uses Uvicorn reload mode).
 - Source edits trigger graceful reload cycles with stop/start lifecycle events in `log/bridge.log`.
-- Phase 2 placeholders are runnable end-to-end through local emulators and smoke scripts.
-- Automated Phase 2 smoke checks validate handshake, BUSY semantics, cancel path, and idempotent cancel.
+- Northbound verbs (`/conversations`, `/snapshots`, `/snapshots/{requestId}/cancel`) trigger southbound protocol commands.
+- Snapshot event streaming is available via `/snapshots/{requestId}/events` (SSE).
 
 Notes:
 
@@ -140,11 +142,11 @@ Status: completed and verified with local emulators and `testing/smoke_phase2.py
 
 ## Immediate Next Steps
 
-1. Enforce interface separation: keep `/ws` southbound-only and stop using it as a consumer verb channel.
-2. Extract core bridge service layer between southbound and northbound adapters.
-3. Add northbound command endpoints for local non-MCP clients.
-4. Replace snapshot placeholder with real streamed extension pass-through data flow.
-5. Formalize operation lifecycle metrics/log fields for later MCP adapter integration.
+1. Formalize and version northbound response schemas for MCP consumption.
+2. Add richer stream diagnostics and per-operation metrics.
+3. Add integration tests around disconnect and `CONTEXT_LOST` terminal semantics.
+4. Implement MCP adapter on top of the extracted bridge service layer.
+5. Add CI execution for smoke checks and lint/test gates.
 
 Completed in this iteration:
 
@@ -156,6 +158,9 @@ Completed in this iteration:
 - Added `GET /health` and `GET /bridge/status` endpoints for local observability.
 - Added malformed-frame handling that returns protocol error frames instead of immediately terminating active sessions.
 - Added explicit southbound/northbound interface docs (`SOUTHBOUND.md`, `NORTHBOUND.md`).
+- Extracted southbound adapter (`southbound.py`), core service (`service.py`), and northbound routes (`northbound.py`).
+- Implemented northbound command endpoints and SSE snapshot events.
+- Converted consumer emulator to HTTP and added phase-3 end-to-end smoke test.
 
 ## Phase 3: Real Snapshot Streaming
 
@@ -182,6 +187,8 @@ Milestone acceptance criteria:
 - Snapshot of real conversation data can be started and completed.
 - Multiple `CHUNK` frames arrive in order and correlate to one request.
 - Cancel mid-stream stops further chunks and emits cancelled `DONE`.
+
+Status: completed with separated northbound/southbound flow and validated by `testing/smoke_phase3.py`.
 
 ## Phase 4: MCP Adapter Integration
 
@@ -244,8 +251,8 @@ Milestone acceptance criteria:
 5. Verify extension connection milestone. (completed)
 6. Add command router and Phase 2 handlers. (completed)
 7. Add status/health HTTP endpoints. (completed)
-8. Add real streaming integration. (next)
-9. Add MCP tool adapter.
+8. Add real streaming integration. (completed)
+9. Add MCP tool adapter. (next)
 10. Add tests and hardening.
 
 ## Definition of Done for v1

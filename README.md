@@ -10,7 +10,8 @@ This repository currently has Phase 1 and Phase 2 completed, and is preparing Ph
 ## Current Status
 
 - Phase 1 complete: extension can connect to a local bridge and complete `HELLO` -> `HELLO_ACK`.
-- Phase 2 complete: command router, placeholder handlers, busy-state enforcement, request correlation, and idempotent cancel are implemented.
+- Phase 2 complete: command/state skeleton and baseline observability are implemented.
+- Phase 3 implemented: northbound verbs now drive real southbound pass-through streaming.
 - Auto-reload enabled for local development (`python -m bridge`).
 - Canonical logging is enabled to console and `log/bridge.log`.
 - Canonical frame helper is in place for consistent protocol envelopes.
@@ -69,8 +70,9 @@ Expected Phase 1 lifecycle events include:
 Standalone local emulators are available:
 
 - Extension emulator: `testing/emulate_extension.py`
-- Phase 2 smoke check: `testing/smoke_phase2.py`
-- Legacy Phase 2 consumer-over-websocket script: `testing/emulate_consumer.py` (transitional only)
+- Consumer emulator: `testing/emulate_consumer.py`
+- Phase 3 smoke check: `testing/smoke_phase3.py`
+- Backward-compatible wrapper: `testing/smoke_phase2.py`
 
 Usage guide:
 
@@ -88,8 +90,6 @@ Usage guide:
 - `DESIGN.md`: target architecture and data flow
 - `WEBSOCKET_BRIDGE_MCP_DESIGN.md`: protocol-level contract and semantics
 
-## Next Up (Phase 3)
+## Next Up (Phase 4)
 
-- Keep `/ws` strictly extension-facing and move app verbs to northbound endpoints
-- Replace snapshot placeholders with real pass-through stream handling
-- Expand end-to-end tests around extension emulator + northbound verb flows
+Phase 3 focus items are now implemented. Next major milestone is Phase 4 MCP adapter integration.
