@@ -5,6 +5,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextlib import suppress
+from typing import Any
 
 import uvicorn
 from dotenv import load_dotenv
@@ -22,6 +23,11 @@ HOST = os.getenv("BRIDGE_HOST", "127.0.0.1")
 PORT = int(os.getenv("BRIDGE_PORT", "8765"))
 WS_PATH = os.getenv("BRIDGE_PATH", "/ws")
 
+STATE_CONNECTED_IDLE = "CONNECTED_IDLE"
+STATE_BUSY = "BUSY"
+STATE_DISCONNECTED = "DISCONNECTED"
+STATE_ERROR = "ERROR"
+
 logger = logging.getLogger("teams_bridge")
 
 
@@ -33,6 +39,9 @@ class BridgeState:
         self.active_operation_type: str | None = None
         self.active_operation_request_id: str | None = None
         self.snapshot_task: asyncio.Task[None] | None = None
+        self.connection_state: str = STATE_DISCONNECTED
+        self.last_error: str | None = None
+        self.session_info: dict[str, Any] = {}
 
 
 state = BridgeState()
@@ -70,14 +79,24 @@ async def close_active_websocket() -> None:
         await ws.close(code=1001, reason="Server shutting down")
 
 
+def set_connection_state(status: str, error: str | None = None) -> None:
+    state.connection_state = status
+    state.last_error = error
+
+
 def set_active_operation(op_type: str, request_id: str) -> None:
     state.active_operation_type = op_type
     state.active_operation_request_id = request_id
+    set_connection_state(STATE_BUSY)
 
 
 def clear_active_operation() -> None:
     state.active_operation_type = None
     state.active_operation_request_id = None
+    if state.active_websocket is None:
+        set_connection_state(STATE_DISCONNECTED)
+    else:
+        set_connection_state(STATE_CONNECTED_IDLE)
 
 
 async def send_frame(websocket: WebSocket, frame: dict) -> None:
@@ -139,6 +158,19 @@ async def send_bad_request_error(websocket: WebSocket, request_id: str | None, d
         error=details,
     )
     await send_frame(websocket, error_frame)
+
+
+def build_status_payload() -> dict[str, Any]:
+    return {
+        "connectionState": state.connection_state,
+        "activeOperation": {
+            "type": state.active_operation_type,
+            "requestId": state.active_operation_request_id,
+        },
+        "session": state.session_info,
+        "lastError": state.last_error,
+        "hasActiveSocket": state.active_websocket is not None,
+    }
 
 
 async def handle_list_conversations(websocket: WebSocket, request_id: str) -> None:
@@ -251,10 +283,24 @@ async def handle_post_handshake_frame(websocket: WebSocket, frame: dict) -> None
         return
 
     if frame_type == "CANCEL":
-        await handle_cancel(websocket, request_id if isinstance(request_id, str) else None)
+        if not isinstance(request_id, str) or not request_id.strip():
+            await send_bad_request_error(websocket, None, "CANCEL requires requestId")
+            return
+        await handle_cancel(websocket, request_id)
         return
 
     await send_unsupported_error(websocket, request_id if isinstance(request_id, str) else None)
+
+
+@app.get("/health")
+async def health() -> dict[str, Any]:
+    return {"ok": True, "protocol": PROTOCOL_VERSION}
+
+
+@app.get("/bridge/status")
+async def bridge_status() -> dict[str, Any]:
+    async with state.lock:
+        return build_status_payload()
 
 
 @app.websocket("/{full_path:path}")
@@ -280,6 +326,7 @@ async def websocket_bridge(websocket: WebSocket, full_path: str) -> None:
             logger.warning("event=connection_rejected_busy client=%s", client)
             return
         state.active_websocket = websocket
+        set_connection_state(STATE_CONNECTED_IDLE)
 
     await websocket.accept()
     logger.info("event=client_connected client=%s", client)
@@ -290,6 +337,13 @@ async def websocket_bridge(websocket: WebSocket, full_path: str) -> None:
         validate_hello(hello_frame)
 
         payload = hello_frame.get("payload") if isinstance(hello_frame.get("payload"), dict) else {}
+        async with state.lock:
+            state.session_info = {
+                "sessionId": hello_frame.get("sessionId"),
+                "tabId": payload.get("tabId"),
+                "conversationId": payload.get("conversationId"),
+                "conversationTitle": payload.get("conversationTitle"),
+            }
         logger.info(
             "event=hello_received session_id=%s tab_id=%s conversation_id=%s conversation_title=%s",
             hello_frame.get("sessionId"),
@@ -302,17 +356,28 @@ async def websocket_bridge(websocket: WebSocket, full_path: str) -> None:
 
         while True:
             raw_message = await websocket.receive_text()
-            frame = parse_json_message(raw_message)
+            try:
+                frame = parse_json_message(raw_message)
+            except ValueError as exc:
+                logger.warning("event=invalid_frame client=%s error=%s", client, str(exc))
+                await send_bad_request_error(websocket, None, str(exc))
+                continue
             await handle_post_handshake_frame(websocket, frame)
 
     except WebSocketDisconnect as exc:
         logger.info("event=client_disconnected client=%s code=%s", client, exc.code)
+        async with state.lock:
+            set_connection_state(STATE_DISCONNECTED)
     except ValueError as exc:
         logger.error("event=protocol_error client=%s error=%s", client, str(exc))
+        async with state.lock:
+            set_connection_state(STATE_ERROR, str(exc))
         with suppress(Exception):
             await websocket.close(code=1002, reason=str(exc))
     except Exception as exc:  # pragma: no cover
         logger.exception("event=unexpected_error client=%s error=%s", client, str(exc))
+        async with state.lock:
+            set_connection_state(STATE_ERROR, str(exc))
         with suppress(Exception):
             await websocket.close(code=1011, reason="Internal server error")
     finally:
@@ -323,6 +388,8 @@ async def websocket_bridge(websocket: WebSocket, full_path: str) -> None:
             clear_active_operation()
             if state.active_websocket is websocket:
                 state.active_websocket = None
+                set_connection_state(STATE_DISCONNECTED)
+                state.session_info = {}
         if snapshot_task is not None and not snapshot_task.done():
             snapshot_task.cancel()
             with suppress(asyncio.CancelledError):

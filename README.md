@@ -7,7 +7,7 @@ This repository contains a working Phase 1 bridge plus initial Phase 2 protocol 
 ## Current Status
 
 - Phase 1 complete: extension can connect to a local bridge and complete `HELLO` -> `HELLO_ACK`.
-- Phase 2 in progress: command router and placeholder handlers for `LIST_CONVERSATIONS`, `START_SNAPSHOT`, and `CANCEL` are implemented.
+- Phase 2 complete: command router, placeholder handlers, busy-state enforcement, request correlation, and idempotent cancel are implemented.
 - Auto-reload enabled for local development (`python -m bridge`).
 - Canonical logging is enabled to console and `log/bridge.log`.
 - Canonical frame helper is in place for consistent protocol envelopes.
@@ -64,6 +64,7 @@ Standalone local emulators are available:
 
 - Extension emulator: `testing/emulate_extension.py`
 - Consumer emulator: `testing/emulate_consumer.py`
+- Phase 2 smoke check: `testing/smoke_phase2.py`
 
 Usage guide:
 

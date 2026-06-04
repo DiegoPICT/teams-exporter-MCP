@@ -6,6 +6,7 @@ This directory provides standalone scripts to exercise the local bridge during d
 
 - `emulate_consumer.py`: acts like a bridge consumer and sends bridge verbs.
 - `emulate_extension.py`: acts like an extension peer and responds to bridge commands.
+- `smoke_phase2.py`: automated smoke checks for Phase 2 command semantics.
 
 ## Common Setup
 
@@ -39,6 +40,21 @@ Simulates extension-side responses when the bridge acts as command sender.
 
 ```bash
 python testing/emulate_extension.py --idle-timeout 20
+```
+
+## Phase 2 Smoke Test
+
+Runs a one-shot check for:
+
+- handshake (`HELLO` -> `HELLO_ACK`)
+- `LIST_CONVERSATIONS` placeholder
+- `START_SNAPSHOT` placeholder start event
+- `BUSY` behavior while snapshot is active
+- `CANCEL` completion
+- idempotent `CANCEL` when no snapshot is active
+
+```bash
+python testing/smoke_phase2.py
 ```
 
 ## Important Notes

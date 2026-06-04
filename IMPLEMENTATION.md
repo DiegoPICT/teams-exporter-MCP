@@ -7,7 +7,7 @@ Goal: move from "extension shows disconnected" to a stable, testable bridge that
 ## Current Status
 
 Phase 1 is implemented and manually validated.
-Phase 2 is in progress with the protocol router and placeholder command flows.
+Phase 2 is complete with the protocol router and placeholder command flows.
 
 Implemented artifacts:
 
@@ -19,6 +19,7 @@ Implemented artifacts:
 - `logging_helper.py` and `log/`: canonical structured logging to console and rotating file (`log/bridge.log`).
 - `testing/emulate_extension.py`: local extension behavior emulator.
 - `testing/emulate_consumer.py`: local consumer verb-flow emulator.
+- `testing/smoke_phase2.py`: automated Phase 2 websocket smoke checks.
 
 Verified runtime behavior:
 
@@ -29,6 +30,7 @@ Verified runtime behavior:
 - Dev hot-reload is enabled for local iteration (`python -m bridge` uses Uvicorn reload mode).
 - Source edits trigger graceful reload cycles with stop/start lifecycle events in `log/bridge.log`.
 - Phase 2 placeholders are runnable end-to-end through the consumer emulator (`LIST_CONVERSATIONS`, `START_SNAPSHOT`, `CANCEL`).
+- Automated Phase 2 smoke checks validate handshake, BUSY semantics, cancel path, and idempotent cancel.
 
 Notes:
 
@@ -129,13 +131,15 @@ Milestone acceptance criteria:
 - `requestId` correlation is visible in logs and responses.
 - `CANCEL` is idempotent and produces terminal `DONE(cancelled)` semantics.
 
+Status: completed and verified with local emulators and `testing/smoke_phase2.py`.
+
 ## Immediate Next Steps
 
-1. Add `GET /health` and `GET /bridge/status` HTTP endpoints for observability.
-2. Add unit/smoke tests around Phase 2 router behavior.
-3. Tighten request validation and error-code mapping for malformed frames.
-4. Replace snapshot placeholder with real streamed extension data flow.
-5. Formalize operation lifecycle metrics/log fields for later MCP adapter integration.
+1. Expand `/bridge/status` into richer diagnostics and include operation timing fields.
+2. Replace snapshot placeholder with real streamed extension data flow.
+3. Add HTTP command endpoints for local non-MCP clients.
+4. Formalize operation lifecycle metrics/log fields for later MCP adapter integration.
+5. Start MCP adapter implementation on top of the shared bridge service layer.
 
 Completed in this iteration:
 
@@ -144,6 +148,8 @@ Completed in this iteration:
 - Implemented post-handshake router for `LIST_CONVERSATIONS`, `START_SNAPSHOT`, and `CANCEL`.
 - Implemented placeholder operation semantics including `BUSY`, idempotent cancel, and request correlation.
 - Added standalone local testing scripts for extension and consumer emulation.
+- Added `GET /health` and `GET /bridge/status` endpoints for local observability.
+- Added malformed-frame handling that returns protocol error frames instead of immediately terminating active sessions.
 
 ## Phase 3: Real Snapshot Streaming
 
@@ -231,8 +237,8 @@ Milestone acceptance criteria:
 4. Implement `HELLO` parse + `HELLO_ACK` response. (completed)
 5. Verify extension connection milestone. (completed)
 6. Add command router and Phase 2 handlers. (completed)
-7. Add status/health HTTP endpoints. (next)
-8. Add real streaming integration.
+7. Add status/health HTTP endpoints. (completed)
+8. Add real streaming integration. (next)
 9. Add MCP tool adapter.
 10. Add tests and hardening.
 
