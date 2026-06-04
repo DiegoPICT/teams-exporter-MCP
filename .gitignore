@@ -5,3 +5,5 @@ __pycache__/
 .env
 log/*
 !log/.gitkeep
+testing/output/*
+!testing/output/.gitkeep
