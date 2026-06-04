@@ -62,5 +62,4 @@ Northbound status should include at least:
 
 ## Testing Expectations
 
-- Consumer-side tests should target northbound endpoints/verbs, not `/ws`.
-- End-to-end tests should pair a northbound client with `testing/emulate_extension.py`.
+- Consumer-side tests target northbound endpoints/verbs, not `/ws`.

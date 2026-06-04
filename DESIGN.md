@@ -93,8 +93,5 @@ Current status:
 
 ## Local Validation Harness
 
-- Extension emulation script: `testing/emulate_extension.py`
 - Consumer emulation script: `testing/emulate_consumer.py`
-- Phase 3 smoke script: `testing/smoke_phase3.py`
-- Backward-compatible wrapper: `testing/smoke_phase2.py`
 - Runbook: `testing/README.md`

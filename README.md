@@ -69,10 +69,7 @@ Expected Phase 1 lifecycle events include:
 
 Standalone local emulators are available:
 
-- Extension emulator: `testing/emulate_extension.py`
 - Consumer emulator: `testing/emulate_consumer.py`
-- Phase 3 smoke check: `testing/smoke_phase3.py`
-- Backward-compatible wrapper: `testing/smoke_phase2.py`
 
 Usage guide:
 
@@ -83,7 +80,7 @@ Usage guide:
 - `bridge.py`: current FastAPI runtime (phase-1/phase-2 implementation)
 - `frame_helper.py`: canonical frame builder utilities
 - `logging_helper.py`: logger setup (console + rotating file)
-- `testing/`: local emulation scripts for extension and consumer behavior
+- `testing/`: local emulation scripts for consumer behavior
 - `SOUTHBOUND.md`: southbound extension transport contract
 - `NORTHBOUND.md`: northbound app verb contract
 - `IMPLEMENTATION.md`: phased delivery plan and status

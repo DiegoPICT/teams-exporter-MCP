@@ -81,5 +81,4 @@ Southbound adapter should not own app-facing verb semantics beyond transport enf
 
 ## Validation Harness
 
-- Extension peer emulator: `testing/emulate_extension.py`
 - Log file: `log/bridge.log`

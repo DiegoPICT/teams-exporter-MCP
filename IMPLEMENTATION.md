@@ -23,10 +23,7 @@ Implemented artifacts:
 - `.env`: local defaults (`BRIDGE_HOST`, `BRIDGE_PORT`, `BRIDGE_PATH`).
 - `.gitignore`: excludes `.venv`, caches, and local `.env`.
 - `logging_helper.py` and `log/`: canonical structured logging to console and rotating file (`log/bridge.log`).
-- `testing/emulate_extension.py`: local extension behavior emulator.
 - `testing/emulate_consumer.py`: northbound consumer emulator over HTTP verbs.
-- `testing/smoke_phase3.py`: end-to-end phase-3 smoke checks.
-- `testing/smoke_phase2.py`: compatibility wrapper that runs phase-3 smoke checks.
 
 Verified runtime behavior:
 
@@ -153,14 +150,11 @@ Completed in this iteration:
 - Added `frame_helper.py` as the canonical envelope builder (`make_frame`, `make_error`).
 - Refactored `bridge.py` to use frame helper for `HELLO_ACK` and `ERROR` responses.
 - Implemented post-handshake router for `LIST_CONVERSATIONS`, `START_SNAPSHOT`, and `CANCEL`.
-- Implemented placeholder operation semantics including `BUSY`, idempotent cancel, and request correlation.
-- Added standalone local testing scripts for extension and consumer emulation.
-- Added `GET /health` and `GET /bridge/status` endpoints for local observability.
-- Added malformed-frame handling that returns protocol error frames instead of immediately terminating active sessions.
+- Implemented operation semantics including `BUSY`, idempotent cancel, and request correlation.
 - Added explicit southbound/northbound interface docs (`SOUTHBOUND.md`, `NORTHBOUND.md`).
 - Extracted southbound adapter (`southbound.py`), core service (`service.py`), and northbound routes (`northbound.py`).
 - Implemented northbound command endpoints and SSE snapshot events.
-- Converted consumer emulator to HTTP and added phase-3 end-to-end smoke test.
+- Converted consumer emulator to HTTP.
 
 ## Phase 3: Real Snapshot Streaming
 
@@ -188,7 +182,7 @@ Milestone acceptance criteria:
 - Multiple `CHUNK` frames arrive in order and correlate to one request.
 - Cancel mid-stream stops further chunks and emits cancelled `DONE`.
 
-Status: completed with separated northbound/southbound flow and validated by `testing/smoke_phase3.py`.
+Status: completed with separated northbound/southbound flow.
 
 ## Phase 4: MCP Adapter Integration
 
