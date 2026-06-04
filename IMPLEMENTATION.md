@@ -13,7 +13,7 @@ Goal: move from "extension shows disconnected" to a stable, testable bridge that
 
 Phase 1 is implemented and manually validated.
 Phase 2 is complete with the protocol router and placeholder command flows.
-Phase 3 is implemented with northbound-driven real pass-through streaming.
+Phase 3 is complete, but with known integration bugs (see Known Bugs below).
 
 Implemented artifacts:
 
@@ -139,11 +139,11 @@ Status: completed and verified with local emulators and `testing/smoke_phase2.py
 
 ## Immediate Next Steps
 
-1. Formalize and version northbound response schemas for MCP consumption.
-2. Add richer stream diagnostics and per-operation metrics.
-3. Add integration tests around disconnect and `CONTEXT_LOST` terminal semantics.
-4. Implement MCP adapter on top of the extracted bridge service layer.
-5. Add CI execution for smoke checks and lint/test gates.
+1. **Gap Analysis & Planning**: Properly identify gaps and create the plan for the MCP wrapper (Phase 4).
+2. **Bug Fixes**: Resolve the active chat context-sync mismatch and export file naming bugs.
+3. Formalize and version northbound response schemas for MCP consumption.
+4. Add richer stream diagnostics and per-operation metrics.
+5. Add integration tests around disconnect and `CONTEXT_LOST` terminal semantics.
 
 Completed in this iteration:
 
@@ -183,6 +183,11 @@ Milestone acceptance criteria:
 - Cancel mid-stream stops further chunks and emits cancelled `DONE`.
 
 Status: completed with separated northbound/southbound flow.
+
+### Known Bugs
+
+- **Context-sync mismatch**: The extension GUI active chat does not sync accurately with the active bridge context, resulting in exporting background or incorrect conversations instead of the actively selected one.
+- **Export file naming**: The JSON export file naming inherits the wrong or missing chat name due to payload shape mismatches or fallback logic failures.
 
 ## Phase 4: MCP Adapter Integration
 

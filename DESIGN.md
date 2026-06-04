@@ -88,8 +88,8 @@ flowchart LR
 
 Current status:
 
-- Steps 1-4 are implemented in the current codebase.
-- Next major work is Step 5 (MCP adapter).
+- Steps 1-4 are implemented in the current codebase (with some known integration bugs).
+- Next major work is Step 5: Gap analysis and planning for the MCP adapter wrapper.
 
 ## Local Validation Harness
 

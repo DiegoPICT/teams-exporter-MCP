@@ -11,7 +11,7 @@ This repository currently has Phase 1 and Phase 2 completed, and is preparing Ph
 
 - Phase 1 complete: extension can connect to a local bridge and complete `HELLO` -> `HELLO_ACK`.
 - Phase 2 complete: command/state skeleton and baseline observability are implemented.
-- Phase 3 implemented: northbound verbs now drive real southbound pass-through streaming.
+- Phase 3 complete (with known bugs): northbound verbs drive real southbound streaming, but there are context-sync and export naming bugs to resolve.
 - Auto-reload enabled for local development (`python -m bridge`).
 - Canonical logging is enabled to console and `log/bridge.log`.
 - Canonical frame helper is in place for consistent protocol envelopes.
@@ -89,4 +89,4 @@ Usage guide:
 
 ## Next Up (Phase 4)
 
-Phase 3 focus items are now implemented. Next major milestone is Phase 4 MCP adapter integration.
+Gap analysis and planning for the MCP adapter wrapper.
