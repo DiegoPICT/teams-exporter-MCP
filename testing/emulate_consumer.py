@@ -211,6 +211,64 @@ def run_full_sync(base: str, timeout: float, events_timeout: float, chat_index: 
     consume_sse(f"{base}/snapshots/{urllib.parse.quote(request_id)}/events", timeout=timeout, max_seconds=events_timeout)
 
 
+def run_export(base: str, timeout: float, events_timeout: float, chat_index: int) -> None:
+    conversations = run_list(base, timeout=timeout)
+    if not conversations:
+        print("[consumer] No conversations found, cannot export.")
+        return
+    
+    if chat_index < 1 or chat_index > len(conversations):
+        print(f"[consumer] Invalid chat index {chat_index}. Must be between 1 and {len(conversations)}.")
+        return
+    
+    selected_chat = conversations[chat_index - 1]
+    conv_id = selected_chat.get("id") or selected_chat.get("conversationId")
+    title = extract_title(selected_chat) or "Untitled"
+    
+    print(f"\n[consumer] >>> Exporting chat {chat_index}: {title} ({conv_id}) <<<\n")
+    
+    status, body = request_json(
+        "POST",
+        f"{base}/snapshots",
+        payload={
+            "conversationId": conv_id,
+            "includeReplies": True,
+            "includeReactions": True,
+            "includeSystem": False,
+        },
+        timeout=timeout,
+    )
+    print(f"[consumer] POST /snapshots -> {status} {body}")
+    if status != 200 or not isinstance(body, dict):
+        return
+
+    request_id = body.get("requestId")
+    if not isinstance(request_id, str):
+        return
+
+    print("\n[consumer] >>> Streaming and saving messages <<<\n")
+    events = consume_sse(f"{base}/snapshots/{urllib.parse.quote(request_id)}/events", timeout=timeout, max_seconds=events_timeout)
+
+    all_messages = []
+    for event in events:
+        if event.get("type") == "CHUNK":
+            all_messages.extend(event.get("payload", {}).get("messages", []))
+
+    safe_title = "".join([c if c.isalnum() else "_" for c in title])
+    filename = f"{safe_title}.json"
+
+    export_data = {
+        "title": title,
+        "conversationId": conv_id,
+        "messages": all_messages,
+    }
+
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(export_data, f, indent=2, ensure_ascii=False)
+
+    print(f"\n[consumer] Exported {len(all_messages)} messages to {filename}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Emulate northbound consumer behavior over HTTP endpoints")
     parser.add_argument("--host", default="127.0.0.1")
@@ -220,7 +278,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cancel-delay", type=float, default=1.0)
     parser.add_argument("--wait-for-extension", type=float, default=0.0, help="Seconds to wait for extension socket")
     parser.add_argument("--chat-index", type=int, default=1, help="Index of chat to sync in full-sync mode (1-based)")
-    parser.add_argument("--mode", choices=["status", "list", "chats", "snapshot", "cancel", "full-sync", "all"], default="all")
+    parser.add_argument("--mode", choices=["status", "list", "chats", "snapshot", "cancel", "full-sync", "export", "all"], default="all")
     return parser.parse_args()
 
 
@@ -258,6 +316,8 @@ def main() -> None:
         run_snapshot(base, timeout=args.timeout, events_timeout=args.events_timeout)
     if args.mode == "full-sync":
         run_full_sync(base, timeout=args.timeout, events_timeout=args.events_timeout, chat_index=args.chat_index)
+    if args.mode == "export":
+        run_export(base, timeout=args.timeout, events_timeout=args.events_timeout, chat_index=args.chat_index)
     if args.mode in {"cancel", "all"}:
         run_cancel(base, timeout=args.timeout, cancel_delay=args.cancel_delay, events_timeout=args.events_timeout)
 
