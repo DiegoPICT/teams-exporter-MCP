@@ -2,11 +2,12 @@
 
 Local WebSocket bridge for Teams Chat Exporter and upcoming MCP adapter integration.
 
-This repository currently contains a working Phase 1 bridge implementation and the protocol/design docs for planned Phase 2+ work.
+This repository contains a working Phase 1 bridge plus initial Phase 2 protocol skeleton handlers.
 
 ## Current Status
 
 - Phase 1 complete: extension can connect to a local bridge and complete `HELLO` -> `HELLO_ACK`.
+- Phase 2 in progress: command router and placeholder handlers for `LIST_CONVERSATIONS`, `START_SNAPSHOT`, and `CANCEL` are implemented.
 - Auto-reload enabled for local development (`python -m bridge`).
 - Canonical logging is enabled to console and `log/bridge.log`.
 - Canonical frame helper is in place for consistent protocol envelopes.
@@ -15,6 +16,7 @@ This repository currently contains a working Phase 1 bridge implementation and t
 
 - Bridge design: `WEBSOCKET_BRIDGE_MCP_DESIGN.md`
 - Implementation plan and progress: `IMPLEMENTATION.md`
+- Architecture plan: `DESIGN.md`
 
 ## Quick Start
 
@@ -56,17 +58,29 @@ Expected Phase 1 lifecycle events include:
 - `event=hello_ack_sent`
 - `event=client_disconnected`
 
+## Testing
+
+Standalone local emulators are available:
+
+- Extension emulator: `testing/emulate_extension.py`
+- Consumer emulator: `testing/emulate_consumer.py`
+
+Usage guide:
+
+- `testing/README.md`
+
 ## Repository Layout
 
 - `bridge.py`: FastAPI WebSocket server and Phase 1 session lifecycle
 - `frame_helper.py`: canonical frame builder utilities
 - `logging_helper.py`: logger setup (console + rotating file)
+- `testing/`: local emulation scripts for extension and consumer behavior
 - `IMPLEMENTATION.md`: phased delivery plan and status
+- `DESIGN.md`: target architecture and data flow
 - `WEBSOCKET_BRIDGE_MCP_DESIGN.md`: protocol-level contract and semantics
 
 ## Next Up (Phase 2)
 
-- Add command router for post-handshake frames
-- Implement placeholders for `LIST_CONVERSATIONS`, `START_SNAPSHOT`, and `CANCEL`
-- Enforce active-operation constraints and `BUSY` handling
-- Add smoke tests for protocol paths
+- Add status/health HTTP endpoints (`/health`, `/bridge/status`)
+- Expand placeholder handlers toward real extension data flow
+- Add automated smoke test coverage for protocol paths
