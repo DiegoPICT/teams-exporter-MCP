@@ -11,9 +11,11 @@ Phase 1 is implemented and manually validated.
 Implemented artifacts:
 
 - `bridge.py`: FastAPI-based local WebSocket bridge entrypoint.
+- `frame_helper.py`: canonical frame/envelope helper for consistent protocol responses.
 - `requirements.txt`: runtime dependencies (`fastapi`, `uvicorn[standard]`, `python-dotenv`).
 - `.env`: local defaults (`BRIDGE_HOST`, `BRIDGE_PORT`, `BRIDGE_PATH`).
 - `.gitignore`: excludes `.venv`, caches, and local `.env`.
+- `logging_helper.py` and `log/`: canonical structured logging to console and rotating file (`log/bridge.log`).
 
 Verified runtime behavior:
 
@@ -22,6 +24,7 @@ Verified runtime behavior:
 - Bridge responds with `HELLO_ACK` and keeps connection open.
 - Disconnects and reconnects are handled cleanly (`code=1001` observed during manual testing).
 - Dev hot-reload is enabled for local iteration (`python -m bridge` uses Uvicorn reload mode).
+- Source edits trigger graceful reload cycles with stop/start lifecycle events in `log/bridge.log`.
 
 Notes:
 
@@ -124,15 +127,19 @@ Milestone acceptance criteria:
 
 ## Immediate Next Steps
 
-1. Add a small frame helper layer to standardize response envelopes (`v`, `type`, `requestId`, `ts`, `payload`, `error`).
-2. Add a command router for post-handshake frames.
-3. Implement Phase 2 placeholders:
+1. Add a command router for post-handshake frames.
+2. Implement Phase 2 placeholders:
    - `LIST_CONVERSATIONS` -> `CONVERSATIONS` with empty arrays.
    - `START_SNAPSHOT` -> `SNAPSHOT_STARTED` then `DONE` (`count: 0`).
    - `CANCEL` -> idempotent cancelled `DONE`.
-4. Enforce single active operation and return `ERROR` with `payload.code: BUSY` when violated.
-5. Ensure all operation responses echo correlated `requestId`.
-6. Add smoke tests for malformed frame, unsupported type, busy path, and cancel-without-active-operation.
+3. Enforce single active operation and return `ERROR` with `payload.code: BUSY` when violated.
+4. Ensure all operation responses echo correlated `requestId`.
+5. Add smoke tests for malformed frame, unsupported type, busy path, and cancel-without-active-operation.
+
+Completed in this iteration:
+
+- Added `frame_helper.py` as the canonical envelope builder (`make_frame`, `make_error`).
+- Refactored `bridge.py` to use frame helper for `HELLO_ACK` and `ERROR` responses.
 
 ## Phase 3: Real Snapshot Streaming
 
