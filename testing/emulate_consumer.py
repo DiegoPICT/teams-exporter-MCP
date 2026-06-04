@@ -56,9 +56,68 @@ def base_url(host: str, port: int) -> str:
     return f"http://{host}:{port}"
 
 
+def extract_title(item: dict[str, Any]) -> str | None:
+    for key in ("title", "conversationTitle", "displayName", "name", "topic", "chatName"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    participants = item.get("participants")
+    if isinstance(participants, list):
+        names: list[str] = []
+        for participant in participants:
+            if isinstance(participant, dict):
+                candidate = participant.get("displayName") or participant.get("name")
+                if isinstance(candidate, str) and candidate.strip():
+                    names.append(candidate.strip())
+        if names:
+            return ", ".join(names)
+
+    group_members = item.get("groupMembers")
+    if isinstance(group_members, list):
+        names: list[str] = []
+        for member in group_members:
+            if isinstance(member, str) and member.strip():
+                names.append(member.strip())
+            elif isinstance(member, dict):
+                candidate = (
+                    member.get("displayName")
+                    or member.get("name")
+                    or member.get("title")
+                    or member.get("upn")
+                )
+                if isinstance(candidate, str) and candidate.strip():
+                    names.append(candidate.strip())
+        if names:
+            return ", ".join(names)
+
+    return None
+
+
 def run_list(base: str, timeout: float) -> None:
     status, body = request_json("GET", f"{base}/conversations", timeout=timeout)
     print(f"[consumer] GET /conversations -> {status} {body}")
+    if status == 200 and isinstance(body, dict):
+        conversations = body.get("conversations") if isinstance(body.get("conversations"), list) else []
+        if not conversations:
+            print("[consumer] chats: none returned")
+            return
+        print("[consumer] chats:")
+        missing_title_seen = False
+        for idx, item in enumerate(conversations, start=1):
+            if isinstance(item, dict):
+                conv_id = item.get("id") or item.get("conversationId")
+                title = extract_title(item)
+                print(f"  {idx}. title={title} id={conv_id}")
+                if title is None and not missing_title_seen:
+                    missing_title_seen = True
+                    print(f"  [debug] missing-title sample keys={sorted(item.keys())}")
+                    debug_subset = {
+                        key: item.get(key)
+                        for key in ("name", "title", "conversationTitle", "displayName", "chatName", "groupMembers")
+                        if key in item
+                    }
+                    print(f"  [debug] missing-title sample values={debug_subset}")
 
 
 def run_snapshot(base: str, timeout: float, events_timeout: float) -> None:
@@ -110,8 +169,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=10.0)
     parser.add_argument("--events-timeout", type=float, default=30.0)
     parser.add_argument("--cancel-delay", type=float, default=1.0)
-    parser.add_argument("--mode", choices=["status", "list", "snapshot", "cancel", "all"], default="all")
+    parser.add_argument("--wait-for-extension", type=float, default=0.0, help="Seconds to wait for extension socket")
+    parser.add_argument("--mode", choices=["status", "list", "chats", "snapshot", "cancel", "all"], default="all")
     return parser.parse_args()
+
+
+def wait_for_extension(base: str, timeout: float, wait_seconds: float) -> None:
+    if wait_seconds <= 0:
+        return
+
+    deadline = time.time() + wait_seconds
+    while time.time() < deadline:
+        status, payload = request_json("GET", f"{base}/bridge/status", timeout=timeout)
+        if status == 200 and isinstance(payload, dict) and payload.get("hasActiveSocket") is True:
+            print("[consumer] extension connected")
+            return
+        time.sleep(0.3)
+
+    print(f"[consumer] extension did not connect within {wait_seconds:.1f}s")
 
 
 def main() -> None:
@@ -123,9 +198,11 @@ def main() -> None:
     status, bridge_status = request_json("GET", f"{base}/bridge/status", timeout=args.timeout)
     print(f"[consumer] GET /bridge/status -> {status} {bridge_status}")
 
+    wait_for_extension(base, timeout=args.timeout, wait_seconds=args.wait_for_extension)
+
     if args.mode in {"status"}:
         return
-    if args.mode in {"list", "all"}:
+    if args.mode in {"list", "chats", "all"}:
         run_list(base, timeout=args.timeout)
     if args.mode in {"snapshot", "all"}:
         run_snapshot(base, timeout=args.timeout, events_timeout=args.events_timeout)
