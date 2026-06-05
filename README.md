@@ -24,6 +24,7 @@ This repository currently has Phase 1 and Phase 2 completed, and is preparing Ph
 - `NORTHBOUND.md`: app/API-facing verb interface boundary
 - `WEBSOCKET_BRIDGE_MCP_DESIGN.md`: protocol-level contract details
 - `IMPLEMENTATION.md`: phased delivery status and backlog
+- `EXTENSIONSv2.md`: discovered extension issues and v2 protocol recommendations
 
 ## Quick Start
 
