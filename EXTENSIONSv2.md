@@ -54,3 +54,24 @@ The v1 extension only communicates the active `conversationId` and `conversation
 **Recommendation for v2:**
 - Add a new extension-initiated frame (e.g., `CONTEXT_UPDATED` or `ACTIVE_CHAT_CHANGED`) that is emitted whenever the user changes the active chat in the GUI. 
 - The bridge can use this to keep its `session_info` synchronized in real-time, allowing MCP LLM clients to proactively ask "I see you just switched to Chat X, would you like me to summarize it?"
+
+## 4. Extension Internal Log Retrieval for Troubleshooting
+
+**Description:**
+Currently, if the extension encounters internal errors (e.g., DOM parsing failures, network drops, internal state errors), the bridge has little to no visibility unless a specifically mapped `ERROR` frame is sent. To aid in autonomous troubleshooting without requiring the user to open browser Developer Tools, the bridge needs a way to fetch recent internal logs directly from the extension.
+
+**Recommendation for v2:**
+- Implement a new `GET_LOGS` transaction where the bridge can specify a limit parameter (e.g., `{"limit": 100}`).
+- The extension responds with a `LOGS_RESULT` frame containing an array of its recent internal console/log entries (including timestamps, severity levels, and raw messages).
+- This will allow the MCP LLM to proactively diagnose extension-side issues and provide actionable advice to the user.
+
+## 5. Generic API Call Pass-Through
+
+**Description:**
+The v1 protocol relies on highly specific, rigid operations (`LIST_CONVERSATIONS`, `START_SNAPSHOT`). As the MCP bridge evolves, it will inevitably need access to other data (e.g., user profiles, team channel lists, specific message metadata) that the extension could easily fetch using its authenticated context. Hardcoding every single new operation into the extension protocol creates a tight coupling bottleneck.
+
+**Recommendation for v2:**
+- Implement a generic `API_CALL` transaction.
+- The bridge sends a frame specifying the exact request parameters: `{"method": "GET", "endpoint": "/api/...", "body": {}}`.
+- The extension acts as an authenticated proxy, executes the HTTP request against the internal Teams API, and returns an `API_RESULT` frame containing the resulting raw object, HTTP status code, and/or error details: `{"status": 200, "data": {...}, "error": null}`.
+- This creates a highly flexible interface where complex business logic can live entirely in the bridge/MCP layer without requiring constant extension updates.
