@@ -140,12 +140,15 @@ Status: completed and verified with local emulators and `testing/smoke_phase2.py
 ## Immediate Next Steps
 
 1. **Gap Analysis & Planning**: Properly identify gaps and create the plan for the MCP wrapper (Phase 4).
-2. **Bug Fixes**: Resolve the active chat context-sync mismatch and export file naming bugs.
-3. Formalize and version northbound response schemas for MCP consumption.
-4. Add richer stream diagnostics and per-operation metrics.
-5. Add integration tests around disconnect and `CONTEXT_LOST` terminal semantics.
+2. Formalize and version northbound response schemas for MCP consumption.
+3. Add richer stream diagnostics and per-operation metrics.
+4. Add integration tests around disconnect and `CONTEXT_LOST` terminal semantics.
 
 Completed in this iteration:
+
+- Replaced ambiguous/noisy logs with structured, module-specific `get_logger()` output, separating data fragments to `DEBUG` level.
+- Fixed the context-sync mismatch and export file naming bugs by updating the consumer logic to parse `SNAPSHOT_STARTED` and distinguish `active-chat` vs `specific-chat` requests.
+- Added explicit error catching and northbound/southbound disconnect reporting for clear transparent debugging of the `1012` service-restart code.
 
 - Added `frame_helper.py` as the canonical envelope builder (`make_frame`, `make_error`).
 - Refactored `bridge.py` to use frame helper for `HELLO_ACK` and `ERROR` responses.
@@ -186,8 +189,7 @@ Status: completed with separated northbound/southbound flow.
 
 ### Known Bugs
 
-- **Context-sync mismatch**: The extension GUI active chat does not sync accurately with the active bridge context, resulting in exporting background or incorrect conversations instead of the actively selected one.
-- **Export file naming**: The JSON export file naming inherits the wrong or missing chat name due to payload shape mismatches or fallback logic failures.
+- **Context-sync mismatch / Export file naming**: Fixed. The `START_SNAPSHOT` request respects whether a `conversationId` is provided by the consumer. The consumer now has three distinct modes (`active-chat`, `list-chats`, `specific-chat`) to differentiate between exporting the currently selected GUI chat and explicitly asking the extension to export a different chat by ID. Furthermore, the consumer correctly parses the `SNAPSHOT_STARTED` event to name the output file precisely based on the chat the extension *actually* started exporting, eliminating naming mismatches.
 
 ## Phase 4: MCP Adapter Integration
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from frame_helper import make_error, make_frame
+from logging_helper import get_logger
 from southbound import ExtensionSession
 
 
@@ -28,7 +29,7 @@ DONE = "DONE"
 TERMINAL_TYPES = {DONE, ERROR_FRAME}
 DEFAULT_TIMEOUT_SECONDS = float(os.getenv("BRIDGE_OPERATION_TIMEOUT", "30"))
 
-logger = logging.getLogger("teams_bridge")
+logger = get_logger(__name__)
 
 
 class BridgeServiceError(Exception):
@@ -315,8 +316,10 @@ class BridgeService:
 
         if frame_type == ERROR_FRAME:
             payload = frame.get("payload") if isinstance(frame.get("payload"), dict) else {}
-            error_code = payload.get("code")
-            error_message = frame.get("error")
+            error_code = payload.get("code", "UNKNOWN")
+            error_message = frame.get("error", "Unknown error")
+            
+            logger.error("event=extension_operation_error request_id=%s code=%s message=%s", request_id, error_code, error_message)
 
             if error_code == "CONTEXT_LOST":
                 self._set_state(STATE_CONTEXT_LOST, error_message if isinstance(error_message, str) else "CONTEXT_LOST")

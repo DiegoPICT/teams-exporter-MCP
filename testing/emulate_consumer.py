@@ -48,11 +48,21 @@ def consume_sse(url: str, timeout: float, max_seconds: float) -> list[dict[str, 
                         author = msg.get("author") or msg.get("from") or "Unknown"
                         text = msg.get("text") or msg.get("content") or "<no text>"
                         ts = msg.get("ts") or msg.get("timestamp") or msg.get("createdDateTime") or ""
-                        print(f"  [{ts}] {author}: {text[:100]}")
+                        print(f"  [{ts}] {author}: <message with {len(text)} characters>")
                 else:
-                    print(f"[consumer] sse type={payload.get('type')} requestId={payload.get('requestId')} payload={payload.get('payload')}")
+                    payload_data = payload.get('payload')
+                    if payload.get("type") == "ERROR":
+                        error_msg = payload.get("error", "Unknown error")
+                        error_code = payload_data.get("code", "UNKNOWN") if isinstance(payload_data, dict) else "UNKNOWN"
+                        print(f"\n[consumer] 🛑 Gracefully stopping - Extension reported error: [{error_code}] {error_msg}\n")
+                    elif payload_data is not None:
+                        print(f"[consumer] sse type={payload.get('type')} requestId={payload.get('requestId')} payload_keys={list(payload_data.keys()) if isinstance(payload_data, dict) else type(payload_data)}")
+                    else:
+                        print(f"[consumer] sse type={payload.get('type')} requestId={payload.get('requestId')}")
                 
                 if payload.get("type") in {"DONE", "ERROR"}:
+                    if payload.get("type") == "DONE":
+                        print(f"\n[consumer] ✅ Stream completed successfully.\n")
                     break
             if time.time() - start > max_seconds:
                 break
@@ -65,7 +75,7 @@ def base_url(host: str, port: int) -> str:
 
 
 def extract_title(item: dict[str, Any]) -> str | None:
-    for key in ("title", "conversationTitle", "displayName", "name", "topic", "chatName"):
+    for key in ("title", "conversationTitle", "displayName", "name", "topic", "chatName", "subtitle"):
         value = item.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
@@ -104,7 +114,8 @@ def extract_title(item: dict[str, Any]) -> str | None:
 
 def run_list(base: str, timeout: float) -> list[dict[str, Any]]:
     status, body = request_json("GET", f"{base}/conversations", timeout=timeout)
-    print(f"[consumer] GET /conversations -> {status} {body}")
+    body_summary = f"<dict with keys: {list(body.keys())}>" if isinstance(body, dict) else type(body)
+    print(f"[consumer] GET /conversations -> {status} {body_summary}")
     if status == 200 and isinstance(body, dict):
         conversations = body.get("conversations") if isinstance(body.get("conversations"), list) else []
         if not conversations:
@@ -130,7 +141,8 @@ def run_list(base: str, timeout: float) -> list[dict[str, Any]]:
     return []
 
 
-def run_snapshot(base: str, timeout: float, events_timeout: float) -> None:
+def run_active_chat(base: str, timeout: float, events_timeout: float) -> None:
+    print(f"\n[consumer] >>> Test 1: Iterate messages on the CURRENTLY SELECTED chat <<<\n")
     status, body = request_json(
         "POST",
         f"{base}/snapshots",
@@ -141,8 +153,10 @@ def run_snapshot(base: str, timeout: float, events_timeout: float) -> None:
         },
         timeout=timeout,
     )
-    print(f"[consumer] POST /snapshots -> {status} {body}")
+    body_summary = f"<dict with keys: {list(body.keys())}>" if isinstance(body, dict) else type(body)
+    print(f"[consumer] POST /snapshots (no conversationId) -> {status} {body_summary}")
     if status != 200 or not isinstance(body, dict):
+        print(f"[consumer] Failed to start snapshot: {body}")
         return
 
     request_id = body.get("requestId")
@@ -152,69 +166,11 @@ def run_snapshot(base: str, timeout: float, events_timeout: float) -> None:
     consume_sse(f"{base}/snapshots/{urllib.parse.quote(request_id)}/events", timeout=timeout, max_seconds=events_timeout)
 
 
-def run_cancel(base: str, timeout: float, cancel_delay: float, events_timeout: float) -> None:
-    status, body = request_json("POST", f"{base}/snapshots", payload={}, timeout=timeout)
-    print(f"[consumer] POST /snapshots -> {status} {body}")
-    if status != 200 or not isinstance(body, dict):
-        return
-
-    request_id = body.get("requestId")
-    if not isinstance(request_id, str):
-        return
-
-    time.sleep(cancel_delay)
-    cancel_status, cancel_body = request_json(
-        "POST",
-        f"{base}/snapshots/{urllib.parse.quote(request_id)}/cancel",
-        timeout=timeout,
-    )
-    print(f"[consumer] POST /snapshots/{request_id}/cancel -> {cancel_status} {cancel_body}")
-    consume_sse(f"{base}/snapshots/{urllib.parse.quote(request_id)}/events", timeout=timeout, max_seconds=events_timeout)
-
-
-def run_full_sync(base: str, timeout: float, events_timeout: float, chat_index: int) -> None:
+def run_specific_chat(base: str, timeout: float, events_timeout: float, chat_index: int) -> None:
+    print(f"\n[consumer] >>> Test 3: Iterate messages on a SPECIFIC chat <<<\n")
     conversations = run_list(base, timeout=timeout)
     if not conversations:
-        print("[consumer] No conversations found, cannot full-sync.")
-        return
-    
-    if chat_index < 1 or chat_index > len(conversations):
-        print(f"[consumer] Invalid chat index {chat_index}. Must be between 1 and {len(conversations)}.")
-        return
-    
-    selected_chat = conversations[chat_index - 1]
-    conv_id = selected_chat.get("id") or selected_chat.get("conversationId")
-    title = extract_title(selected_chat)
-    
-    print(f"\n[consumer] >>> Selecting chat {chat_index}: {title} ({conv_id}) <<<\n")
-    
-    status, body = request_json(
-        "POST",
-        f"{base}/snapshots",
-        payload={
-            "conversationId": conv_id,
-            "includeReplies": True,
-            "includeReactions": True,
-            "includeSystem": False,
-        },
-        timeout=timeout,
-    )
-    print(f"[consumer] POST /snapshots -> {status} {body}")
-    if status != 200 or not isinstance(body, dict):
-        return
-
-    request_id = body.get("requestId")
-    if not isinstance(request_id, str):
-        return
-
-    print("\n[consumer] >>> Streaming messages <<<\n")
-    consume_sse(f"{base}/snapshots/{urllib.parse.quote(request_id)}/events", timeout=timeout, max_seconds=events_timeout)
-
-
-def run_export(base: str, timeout: float, events_timeout: float, chat_index: int) -> None:
-    conversations = run_list(base, timeout=timeout)
-    if not conversations:
-        print("[consumer] No conversations found, cannot export.")
+        print("[consumer] No conversations found, cannot proceed.")
         return
     
     if chat_index < 1 or chat_index > len(conversations):
@@ -225,7 +181,7 @@ def run_export(base: str, timeout: float, events_timeout: float, chat_index: int
     conv_id = selected_chat.get("id") or selected_chat.get("conversationId")
     title = extract_title(selected_chat) or "Untitled"
     
-    print(f"\n[consumer] >>> Exporting chat {chat_index}: {title} ({conv_id}) <<<\n")
+    print(f"[consumer] Selected chat {chat_index}: {title} ({conv_id})")
     
     status, body = request_json(
         "POST",
@@ -238,28 +194,39 @@ def run_export(base: str, timeout: float, events_timeout: float, chat_index: int
         },
         timeout=timeout,
     )
-    print(f"[consumer] POST /snapshots -> {status} {body}")
+    body_summary = f"<dict with keys: {list(body.keys())}>" if isinstance(body, dict) else type(body)
+    print(f"[consumer] POST /snapshots (with conversationId) -> {status} {body_summary}")
     if status != 200 or not isinstance(body, dict):
+        print(f"[consumer] Failed to start snapshot: {body}")
         return
 
     request_id = body.get("requestId")
     if not isinstance(request_id, str):
         return
 
-    print("\n[consumer] >>> Streaming and saving messages <<<\n")
     events = consume_sse(f"{base}/snapshots/{urllib.parse.quote(request_id)}/events", timeout=timeout, max_seconds=events_timeout)
 
+    actual_title = title
+    actual_conv_id = conv_id
     all_messages = []
+
     for event in events:
-        if event.get("type") == "CHUNK":
+        if event.get("type") == "SNAPSHOT_STARTED":
+            payload = event.get("payload", {})
+            if payload.get("conversationTitle"):
+                actual_title = payload.get("conversationTitle")
+            if payload.get("conversationId"):
+                actual_conv_id = payload.get("conversationId")
+            print(f"[consumer] Stream started for chat: {actual_title} ({actual_conv_id})")
+        elif event.get("type") == "CHUNK":
             all_messages.extend(event.get("payload", {}).get("messages", []))
 
-    safe_title = "".join([c if c.isalnum() else "_" for c in title])
+    safe_title = "".join([c if c.isalnum() else "_" for c in actual_title])
     filename = f"{safe_title}.json"
 
     export_data = {
-        "title": title,
-        "conversationId": conv_id,
+        "title": actual_title,
+        "conversationId": actual_conv_id,
         "messages": all_messages,
     }
 
@@ -275,10 +242,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--timeout", type=float, default=10.0)
     parser.add_argument("--events-timeout", type=float, default=30.0)
-    parser.add_argument("--cancel-delay", type=float, default=1.0)
     parser.add_argument("--wait-for-extension", type=float, default=0.0, help="Seconds to wait for extension socket")
-    parser.add_argument("--chat-index", type=int, default=1, help="Index of chat to sync in full-sync mode (1-based)")
-    parser.add_argument("--mode", choices=["status", "list", "chats", "snapshot", "cancel", "full-sync", "export", "all"], default="all")
+    parser.add_argument("--chat-index", type=int, default=1, help="Index of chat to sync in specific-chat mode (1-based)")
+    parser.add_argument("--mode", choices=["status", "list-chats", "active-chat", "specific-chat"], default="status", help="Operation mode to emulate")
     return parser.parse_args()
 
 
@@ -302,24 +268,21 @@ def main() -> None:
     base = base_url(args.host, args.port)
 
     status, health = request_json("GET", f"{base}/health", timeout=args.timeout)
-    print(f"[consumer] GET /health -> {status} {health}")
+    print(f"[consumer] GET /health -> {status}")
     status, bridge_status = request_json("GET", f"{base}/bridge/status", timeout=args.timeout)
-    print(f"[consumer] GET /bridge/status -> {status} {bridge_status}")
+    bridge_summary = f"<dict with keys: {list(bridge_status.keys())}>" if isinstance(bridge_status, dict) else type(bridge_status)
+    print(f"[consumer] GET /bridge/status -> {status} {bridge_summary}")
 
     wait_for_extension(base, timeout=args.timeout, wait_seconds=args.wait_for_extension)
 
-    if args.mode in {"status"}:
+    if args.mode == "status":
         return
-    if args.mode in {"list", "chats", "all"}:
+    elif args.mode == "list-chats":
         run_list(base, timeout=args.timeout)
-    if args.mode in {"snapshot", "all"}:
-        run_snapshot(base, timeout=args.timeout, events_timeout=args.events_timeout)
-    if args.mode == "full-sync":
-        run_full_sync(base, timeout=args.timeout, events_timeout=args.events_timeout, chat_index=args.chat_index)
-    if args.mode == "export":
-        run_export(base, timeout=args.timeout, events_timeout=args.events_timeout, chat_index=args.chat_index)
-    if args.mode in {"cancel", "all"}:
-        run_cancel(base, timeout=args.timeout, cancel_delay=args.cancel_delay, events_timeout=args.events_timeout)
+    elif args.mode == "active-chat":
+        run_active_chat(base, timeout=args.timeout, events_timeout=args.events_timeout)
+    elif args.mode == "specific-chat":
+        run_specific_chat(base, timeout=args.timeout, events_timeout=args.events_timeout, chat_index=args.chat_index)
 
 
 if __name__ == "__main__":

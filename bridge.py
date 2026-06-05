@@ -11,7 +11,7 @@ from fastapi import FastAPI, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
 from frame_helper import PROTOCOL_VERSION, make_frame
-from logging_helper import get_log_file_path, setup_canonical_logging
+from logging_helper import get_log_file_path, get_logger, setup_canonical_logging
 from northbound import configure_router
 from service import BridgeService, BridgeServiceError
 from southbound import ExtensionSession
@@ -24,7 +24,7 @@ HOST = os.getenv("BRIDGE_HOST", "127.0.0.1")
 PORT = int(os.getenv("BRIDGE_PORT", "8765"))
 WS_PATH = os.getenv("BRIDGE_PATH", "/ws")
 
-logger = logging.getLogger("teams_bridge")
+logger = get_logger(__name__)
 service = BridgeService()
 
 
@@ -53,8 +53,7 @@ def validate_hello(frame: dict) -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    global logger
-    logger = setup_canonical_logging("teams_bridge")
+    setup_canonical_logging("teams_bridge")
     logger.info(
         "event=bridge_started host=%s port=%s path=%s protocol=%s log_file=%s",
         HOST,
@@ -105,7 +104,7 @@ async def extension_websocket(websocket: WebSocket, full_path: str) -> None:
         logger.warning("event=connection_rejected_busy client=%s", client)
         return
 
-    logger.info("event=client_connected client=%s", client)
+    logger.info("event=southbound_client_connected client=%s", client)
 
     try:
         raw = await websocket.receive_text()
@@ -114,12 +113,18 @@ async def extension_websocket(websocket: WebSocket, full_path: str) -> None:
         await service.set_session_info(hello_frame)
 
         payload = hello_frame.get("payload") if isinstance(hello_frame.get("payload"), dict) else {}
+        conv_title = payload.get("conversationTitle", "")
+        
         logger.info(
-            "event=hello_received session_id=%s tab_id=%s conversation_id=%s conversation_title=%s",
+            "event=hello_received session_id=%s tab_id=%s conversation_id=%s conversation_title_length=%d",
             hello_frame.get("sessionId"),
             payload.get("tabId"),
             payload.get("conversationId"),
-            payload.get("conversationTitle"),
+            len(conv_title) if conv_title else 0,
+        )
+        logger.debug(
+            "event=hello_received_data conversation_title=%s",
+            conv_title
         )
 
         await session.send_frame(make_frame("HELLO_ACK"))
@@ -137,7 +142,7 @@ async def extension_websocket(websocket: WebSocket, full_path: str) -> None:
             await service.handle_extension_frame(frame)
 
     except WebSocketDisconnect as exc:
-        logger.info("event=client_disconnected client=%s code=%s", client, exc.code)
+        logger.info("event=southbound_client_disconnected client=%s code=%s", client, exc.code)
     except ValueError as exc:
         logger.error("event=protocol_error client=%s error=%s", client, str(exc))
         with suppress(Exception):
@@ -151,12 +156,13 @@ async def extension_websocket(websocket: WebSocket, full_path: str) -> None:
 
 
 def run() -> None:
+    log_level = os.getenv("BRIDGE_LOG_LEVEL", "INFO").lower()
     uvicorn.run(
         "bridge:app",
         host=HOST,
         port=PORT,
         reload=True,
-        log_level="info",
+        log_level=log_level,
     )
 
 
