@@ -26,11 +26,15 @@ After handshake, the direction is fixed:
   - `LIST_CONVERSATIONS`
   - `START_SNAPSHOT`
   - `CANCEL`
+  - `GET_LOGS`
+  - `HEALTH`
 - Extension -> Bridge responses/events:
   - `CONVERSATIONS`
   - `SNAPSHOT_STARTED`
   - `CHUNK`
   - `DONE`
+  - `LOGS_RESULT`
+  - `HEALTH_RESULT`
   - `ERROR`
 
 The extension WebSocket is not the consumer/app verb interface.

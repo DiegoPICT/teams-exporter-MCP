@@ -68,6 +68,32 @@ async def start_snapshot(request: Request, payload: dict[str, Any] | None = None
         raise as_http_error(exc) from exc
 
 
+@router.post("/extensions/logs")
+async def get_extension_logs(request: Request, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    bridge_service = get_service()
+    logger.info("event=http_request_received route=/extensions/logs method=POST client=%s", request.client.host if request.client else "unknown")
+    try:
+        result = await bridge_service.get_logs(payload or {})
+        logger.info("event=http_request_completed route=/extensions/logs status=200")
+        return result
+    except BridgeServiceError as exc:
+        logger.warning("event=http_request_failed route=/extensions/logs status=%s code=%s message=%s", exc.http_status, exc.code, exc.message)
+        raise as_http_error(exc) from exc
+
+
+@router.post("/extensions/health")
+async def get_extension_health(request: Request) -> dict[str, Any]:
+    bridge_service = get_service()
+    logger.info("event=http_request_received route=/extensions/health method=POST client=%s", request.client.host if request.client else "unknown")
+    try:
+        result = await bridge_service.get_extension_health()
+        logger.info("event=http_request_completed route=/extensions/health status=200")
+        return result
+    except BridgeServiceError as exc:
+        logger.warning("event=http_request_failed route=/extensions/health status=%s code=%s message=%s", exc.http_status, exc.code, exc.message)
+        raise as_http_error(exc) from exc
+
+
 @router.post("/snapshots/{request_id}/cancel")
 async def cancel_snapshot(request: Request, request_id: str) -> dict[str, Any]:
     bridge_service = get_service()

@@ -19,12 +19,16 @@ STATE_ERROR = "ERROR"
 LIST_CONVERSATIONS = "LIST_CONVERSATIONS"
 START_SNAPSHOT = "START_SNAPSHOT"
 CANCEL = "CANCEL"
+GET_LOGS = "GET_LOGS"
+HEALTH = "HEALTH"
 
 ERROR_FRAME = "ERROR"
 CONVERSATIONS = "CONVERSATIONS"
 SNAPSHOT_STARTED = "SNAPSHOT_STARTED"
 CHUNK = "CHUNK"
 DONE = "DONE"
+LOGS_RESULT = "LOGS_RESULT"
+HEALTH_RESULT = "HEALTH_RESULT"
 
 TERMINAL_TYPES = {DONE, ERROR_FRAME}
 DEFAULT_TIMEOUT_SECONDS = float(os.getenv("BRIDGE_OPERATION_TIMEOUT", "30"))
@@ -42,6 +46,18 @@ class BridgeServiceError(Exception):
 
 @dataclass
 class ListOperation:
+    request_id: str
+    result_future: asyncio.Future[dict]
+
+
+@dataclass
+class LogsOperation:
+    request_id: str
+    result_future: asyncio.Future[dict]
+
+
+@dataclass
+class HealthOperation:
     request_id: str
     result_future: asyncio.Future[dict]
 
@@ -83,6 +99,8 @@ class BridgeService:
         self.active_operation_type: str | None = None
         self.active_operation_request_id: str | None = None
         self.active_list_operation: ListOperation | None = None
+        self.active_logs_operation: LogsOperation | None = None
+        self.active_health_operation: HealthOperation | None = None
         self.active_snapshot_operation: SnapshotOperation | None = None
         self.snapshot_history: dict[str, SnapshotOperation] = {}
 
@@ -136,6 +154,8 @@ class BridgeService:
                 "tabId": payload.get("tabId"),
                 "conversationId": payload.get("conversationId"),
                 "conversationTitle": payload.get("conversationTitle"),
+                "protocol": payload.get("protocol"),
+                "extensionVersion": payload.get("extensionVersion"),
             }
 
     async def unregister_extension(self, reason: str) -> None:
@@ -153,6 +173,24 @@ class BridgeService:
                     )
                 )
 
+            if self.active_logs_operation is not None and not self.active_logs_operation.result_future.done():
+                self.active_logs_operation.result_future.set_exception(
+                    BridgeServiceError(
+                        "Extension disconnected while waiting for log response",
+                        code="DISCONNECTED",
+                        http_status=503,
+                    )
+                )
+
+            if self.active_health_operation is not None and not self.active_health_operation.result_future.done():
+                self.active_health_operation.result_future.set_exception(
+                    BridgeServiceError(
+                        "Extension disconnected while waiting for health response",
+                        code="DISCONNECTED",
+                        http_status=503,
+                    )
+                )
+
             if self.active_snapshot_operation is not None and not self.active_snapshot_operation.terminal:
                 error_frame = make_error(
                     request_id=self.active_snapshot_operation.request_id,
@@ -162,6 +200,8 @@ class BridgeService:
                 await self.active_snapshot_operation.publish(error_frame)
 
             self.active_list_operation = None
+            self.active_logs_operation = None
+            self.active_health_operation = None
             self.active_snapshot_operation = None
             self._clear_active_operation()
 
@@ -235,6 +275,72 @@ class BridgeService:
         logger.info("event=command_sent type=%s request_id=%s", START_SNAPSHOT, request_id)
         return request_id
 
+    async def get_logs(self, payload: dict[str, Any]) -> dict[str, Any]:
+        session = await self.ensure_command_ready()
+        request_id = f"logs-{uuid.uuid4().hex[:10]}"
+
+        async with self.lock:
+            if self.active_operation_type is not None:
+                raise BridgeServiceError(
+                    "Another operation is already running",
+                    code="BUSY",
+                    http_status=409,
+                )
+            logs_operation = LogsOperation(request_id=request_id, result_future=asyncio.get_running_loop().create_future())
+            self.active_logs_operation = logs_operation
+            self._set_active_operation(GET_LOGS, request_id)
+
+        outbound = make_frame(GET_LOGS, request_id=request_id, payload=payload if payload else None)
+        await session.send_frame(outbound)
+        logger.info("event=command_sent type=%s request_id=%s", GET_LOGS, request_id)
+
+        try:
+            result = await asyncio.wait_for(logs_operation.result_future, timeout=DEFAULT_TIMEOUT_SECONDS)
+            return result
+        except asyncio.TimeoutError as exc:
+            async with self.lock:
+                if self.active_logs_operation is logs_operation:
+                    self.active_logs_operation = None
+                    self._clear_active_operation()
+            raise BridgeServiceError(
+                "Timed out waiting for LOGS_RESULT response",
+                code="TIMEOUT",
+                http_status=504,
+            ) from exc
+
+    async def get_extension_health(self) -> dict[str, Any]:
+        session = await self.ensure_command_ready()
+        request_id = f"health-{uuid.uuid4().hex[:10]}"
+
+        async with self.lock:
+            if self.active_operation_type is not None:
+                raise BridgeServiceError(
+                    "Another operation is already running",
+                    code="BUSY",
+                    http_status=409,
+                )
+            health_operation = HealthOperation(request_id=request_id, result_future=asyncio.get_running_loop().create_future())
+            self.active_health_operation = health_operation
+            self._set_active_operation(HEALTH, request_id)
+
+        outbound = make_frame(HEALTH, request_id=request_id)
+        await session.send_frame(outbound)
+        logger.info("event=command_sent type=%s request_id=%s", HEALTH, request_id)
+
+        try:
+            result = await asyncio.wait_for(health_operation.result_future, timeout=DEFAULT_TIMEOUT_SECONDS)
+            return result
+        except asyncio.TimeoutError as exc:
+            async with self.lock:
+                if self.active_health_operation is health_operation:
+                    self.active_health_operation = None
+                    self._clear_active_operation()
+            raise BridgeServiceError(
+                "Timed out waiting for HEALTH_RESULT response",
+                code="TIMEOUT",
+                http_status=504,
+            ) from exc
+
     async def get_snapshot_operation(self, request_id: str) -> SnapshotOperation:
         async with self.lock:
             snapshot = self.snapshot_history.get(request_id)
@@ -282,6 +388,12 @@ class BridgeService:
             if frame_type == CONVERSATIONS:
                 await self._handle_conversations_locked(frame)
                 return
+            if frame_type == LOGS_RESULT:
+                await self._handle_logs_result_locked(frame)
+                return
+            if frame_type == HEALTH_RESULT:
+                await self._handle_health_result_locked(frame)
+                return
             if frame_type in {SNAPSHOT_STARTED, CHUNK, DONE, ERROR_FRAME}:
                 await self._handle_snapshot_or_error_locked(frame)
                 return
@@ -310,6 +422,42 @@ class BridgeService:
         self.active_list_operation = None
         self._clear_active_operation()
 
+    async def _handle_logs_result_locked(self, frame: dict[str, Any]) -> None:
+        request_id = frame.get("requestId")
+        if not isinstance(request_id, str):
+            logger.warning("event=logs_result_missing_request_id")
+            return
+
+        logs_op = self.active_logs_operation
+        if logs_op is None or logs_op.request_id != request_id:
+            logger.warning("event=logs_result_request_mismatch request_id=%s", request_id)
+            return
+
+        payload = frame.get("payload") if isinstance(frame.get("payload"), dict) else {}
+        if not logs_op.result_future.done():
+            logs_op.result_future.set_result(payload)
+
+        self.active_logs_operation = None
+        self._clear_active_operation()
+
+    async def _handle_health_result_locked(self, frame: dict[str, Any]) -> None:
+        request_id = frame.get("requestId")
+        if not isinstance(request_id, str):
+            logger.warning("event=health_result_missing_request_id")
+            return
+
+        health_op = self.active_health_operation
+        if health_op is None or health_op.request_id != request_id:
+            logger.warning("event=health_result_request_mismatch request_id=%s", request_id)
+            return
+
+        payload = frame.get("payload") if isinstance(frame.get("payload"), dict) else {}
+        if not health_op.result_future.done():
+            health_op.result_future.set_result(payload)
+
+        self.active_health_operation = None
+        self._clear_active_operation()
+
     async def _handle_snapshot_or_error_locked(self, frame: dict[str, Any]) -> None:
         frame_type = frame.get("type")
         request_id = frame.get("requestId")
@@ -334,6 +482,32 @@ class BridgeService:
                         )
                     )
                 self.active_list_operation = None
+                self._clear_active_operation()
+                return
+
+            if self.active_logs_operation is not None and self.active_logs_operation.request_id == request_id:
+                if not self.active_logs_operation.result_future.done():
+                    self.active_logs_operation.result_future.set_exception(
+                        BridgeServiceError(
+                            error_message if isinstance(error_message, str) else "Get logs operation failed",
+                            code=error_code if isinstance(error_code, str) else "ERROR",
+                            http_status=409 if error_code == "BUSY" else 500,
+                        )
+                    )
+                self.active_logs_operation = None
+                self._clear_active_operation()
+                return
+
+            if self.active_health_operation is not None and self.active_health_operation.request_id == request_id:
+                if not self.active_health_operation.result_future.done():
+                    self.active_health_operation.result_future.set_exception(
+                        BridgeServiceError(
+                            error_message if isinstance(error_message, str) else "Extension health operation failed",
+                            code=error_code if isinstance(error_code, str) else "ERROR",
+                            http_status=409 if error_code == "BUSY" else 500,
+                        )
+                    )
+                self.active_health_operation = None
                 self._clear_active_operation()
                 return
 

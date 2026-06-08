@@ -35,6 +35,8 @@ Verified runtime behavior:
 - Source edits trigger graceful reload cycles with stop/start lifecycle events in `log/bridge.log`.
 - Northbound verbs (`/conversations`, `/snapshots`, `/snapshots/{requestId}/cancel`) trigger southbound protocol commands.
 - Snapshot event streaming is available via `/snapshots/{requestId}/events` (SSE).
+- Extension diagnostics are now queryable through northbound `POST /extensions/logs` (maps to southbound `GET_LOGS`).
+- Extension runtime metadata is now queryable through northbound `POST /extensions/health` (maps to southbound `HEALTH` / `HEALTH_RESULT`).
 
 Notes:
 
@@ -139,10 +141,16 @@ Status: completed and verified with local emulators and `testing/smoke_phase2.py
 
 ## Immediate Next Steps
 
-1. **Gap Analysis & Planning**: Properly identify gaps and create the plan for the MCP wrapper (Phase 4).
+1. **MCP v2 Parity (Extension + Bridge)**: finish remaining v2 transactions beyond `GET_LOGS`/`HEALTH`.
+   - `START_SNAPSHOT` targeted semantics for explicit `conversationId` override behavior.
+   - generic `API_CALL` / `API_RESULT` pass-through with allowlist guardrails.
 2. Formalize and version northbound response schemas for MCP consumption.
 3. Add richer stream diagnostics and per-operation metrics.
 4. Add integration tests around disconnect and `CONTEXT_LOST` terminal semantics.
+5. **Parked Reliability Item (monitor and revisit later):** investigate extension-side non-intentional disconnects (`code=1001`).
+   - Known behavior so far: manual extension disconnect path uses `1000 client-disconnect`, while observed spontaneous drops are `1001`.
+   - Current recovery path: manual reconnect is acceptable for now.
+   - Revisit trigger analysis later using timestamp correlation between bridge logs and extension internal logs (`GET_LOGS`).
 
 Completed in this iteration:
 
@@ -158,6 +166,12 @@ Completed in this iteration:
 - Extracted southbound adapter (`southbound.py`), core service (`service.py`), and northbound routes (`northbound.py`).
 - Implemented northbound command endpoints and SSE snapshot events.
 - Converted consumer emulator to HTTP.
+- Implemented bridge-side extension diagnostics transactions and endpoints:
+  - southbound `GET_LOGS` -> `LOGS_RESULT`
+  - southbound `HEALTH` -> `HEALTH_RESULT`
+  - northbound `POST /extensions/logs`
+  - northbound `POST /extensions/health`
+  - session metadata now includes `protocol` and `extensionVersion` when provided by extension `HELLO`.
 
 ## Phase 3: Real Snapshot Streaming
 

@@ -29,6 +29,8 @@ Current command endpoints:
 - `POST /snapshots`
 - `POST /snapshots/{requestId}/cancel`
 - `GET /snapshots/{requestId}/events` (stream)
+- `POST /extensions/logs`
+- `POST /extensions/health`
 
 ## Verb-to-Protocol Mapping
 
@@ -41,6 +43,12 @@ Current command endpoints:
 - `cancel` / `POST /snapshots/{requestId}/cancel`
   - sends southbound `CANCEL`
   - resolves on terminal cancellation completion
+- `get_extension_logs` / `POST /extensions/logs`
+  - sends southbound `GET_LOGS`
+  - returns pass-through `LOGS_RESULT.payload`
+- `get_extension_health` / `POST /extensions/health`
+  - sends southbound `HEALTH`
+  - returns pass-through `HEALTH_RESULT.payload`
 
 ## Error Surface
 
