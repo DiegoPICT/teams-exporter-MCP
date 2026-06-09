@@ -31,6 +31,7 @@ Current command endpoints:
 - `GET /snapshots/{requestId}/events` (stream)
 - `POST /extensions/logs`
 - `POST /extensions/health`
+- `POST /extensions/api-call`
 
 ## Verb-to-Protocol Mapping
 
@@ -49,6 +50,9 @@ Current command endpoints:
 - `get_extension_health` / `POST /extensions/health`
   - sends southbound `HEALTH`
   - returns pass-through `HEALTH_RESULT.payload`
+- `extension_api_call` / `POST /extensions/api-call`
+  - sends southbound `API_CALL`
+  - returns pass-through `API_RESULT.payload`
 
 ## Error Surface
 

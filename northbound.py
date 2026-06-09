@@ -94,6 +94,19 @@ async def get_extension_health(request: Request) -> dict[str, Any]:
         raise as_http_error(exc) from exc
 
 
+@router.post("/extensions/api-call")
+async def extension_api_call(request: Request, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    bridge_service = get_service()
+    logger.info("event=http_request_received route=/extensions/api-call method=POST client=%s", request.client.host if request.client else "unknown")
+    try:
+        result = await bridge_service.api_call(payload or {})
+        logger.info("event=http_request_completed route=/extensions/api-call status=200")
+        return result
+    except BridgeServiceError as exc:
+        logger.warning("event=http_request_failed route=/extensions/api-call status=%s code=%s message=%s", exc.http_status, exc.code, exc.message)
+        raise as_http_error(exc) from exc
+
+
 @router.post("/snapshots/{request_id}/cancel")
 async def cancel_snapshot(request: Request, request_id: str) -> dict[str, Any]:
     bridge_service = get_service()

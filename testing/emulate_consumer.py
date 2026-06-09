@@ -236,6 +236,42 @@ def run_specific_chat(base: str, timeout: float, events_timeout: float, chat_ind
     print(f"\n[consumer] Exported {len(all_messages)} messages to {filename}")
 
 
+def run_extension_api_call(
+    base: str,
+    timeout: float,
+    method: str,
+    endpoint: str,
+    query_json: str | None,
+    body_json: str | None,
+) -> None:
+    payload: dict[str, Any] = {
+        "method": method,
+        "endpoint": endpoint,
+    }
+
+    if query_json:
+        try:
+            payload["query"] = json.loads(query_json)
+        except json.JSONDecodeError:
+            print("[consumer] Invalid --api-query JSON")
+            return
+
+    if body_json:
+        try:
+            payload["body"] = json.loads(body_json)
+        except json.JSONDecodeError:
+            print("[consumer] Invalid --api-body JSON")
+            return
+
+    status, body = request_json("POST", f"{base}/extensions/api-call", payload=payload, timeout=timeout)
+    print(f"[consumer] POST /extensions/api-call -> {status}")
+    if isinstance(body, dict):
+        print(f"[consumer] response keys={list(body.keys())}")
+    else:
+        print(f"[consumer] response type={type(body)}")
+    print(f"[consumer] response={body}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Emulate northbound consumer behavior over HTTP endpoints")
     parser.add_argument("--host", default="127.0.0.1")
@@ -244,7 +280,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--events-timeout", type=float, default=30.0)
     parser.add_argument("--wait-for-extension", type=float, default=0.0, help="Seconds to wait for extension socket")
     parser.add_argument("--chat-index", type=int, default=1, help="Index of chat to sync in specific-chat mode (1-based)")
-    parser.add_argument("--mode", choices=["status", "list-chats", "active-chat", "specific-chat"], default="status", help="Operation mode to emulate")
+    parser.add_argument("--api-method", default="GET", help="HTTP method for extension-api mode")
+    parser.add_argument("--api-endpoint", default="/api/chats", help="Endpoint for extension-api mode")
+    parser.add_argument("--api-query", default=None, help="JSON string for API query object")
+    parser.add_argument("--api-body", default=None, help="JSON string for API body object")
+    parser.add_argument("--mode", choices=["status", "list-chats", "active-chat", "specific-chat", "extension-api"], default="status", help="Operation mode to emulate")
     return parser.parse_args()
 
 
@@ -283,6 +323,15 @@ def main() -> None:
         run_active_chat(base, timeout=args.timeout, events_timeout=args.events_timeout)
     elif args.mode == "specific-chat":
         run_specific_chat(base, timeout=args.timeout, events_timeout=args.events_timeout, chat_index=args.chat_index)
+    elif args.mode == "extension-api":
+        run_extension_api_call(
+            base,
+            timeout=args.timeout,
+            method=args.api_method,
+            endpoint=args.api_endpoint,
+            query_json=args.api_query,
+            body_json=args.api_body,
+        )
 
 
 if __name__ == "__main__":

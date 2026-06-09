@@ -21,6 +21,7 @@ START_SNAPSHOT = "START_SNAPSHOT"
 CANCEL = "CANCEL"
 GET_LOGS = "GET_LOGS"
 HEALTH = "HEALTH"
+API_CALL = "API_CALL"
 
 ERROR_FRAME = "ERROR"
 CONVERSATIONS = "CONVERSATIONS"
@@ -29,6 +30,7 @@ CHUNK = "CHUNK"
 DONE = "DONE"
 LOGS_RESULT = "LOGS_RESULT"
 HEALTH_RESULT = "HEALTH_RESULT"
+API_RESULT = "API_RESULT"
 
 TERMINAL_TYPES = {DONE, ERROR_FRAME}
 DEFAULT_TIMEOUT_SECONDS = float(os.getenv("BRIDGE_OPERATION_TIMEOUT", "30"))
@@ -62,9 +64,17 @@ class HealthOperation:
     result_future: asyncio.Future[dict]
 
 
+@dataclass
+class ApiOperation:
+    request_id: str
+    result_future: asyncio.Future[dict]
+
+
 class SnapshotOperation:
-    def __init__(self, request_id: str) -> None:
+    def __init__(self, request_id: str, *, expected_conversation_id: str | None = None) -> None:
         self.request_id = request_id
+        self.expected_conversation_id = expected_conversation_id
+        self.started_conversation_id: str | None = None
         self.events: list[dict[str, Any]] = []
         self.terminal = False
         self._lock = asyncio.Lock()
@@ -101,6 +111,7 @@ class BridgeService:
         self.active_list_operation: ListOperation | None = None
         self.active_logs_operation: LogsOperation | None = None
         self.active_health_operation: HealthOperation | None = None
+        self.active_api_operation: ApiOperation | None = None
         self.active_snapshot_operation: SnapshotOperation | None = None
         self.snapshot_history: dict[str, SnapshotOperation] = {}
 
@@ -191,6 +202,15 @@ class BridgeService:
                     )
                 )
 
+            if self.active_api_operation is not None and not self.active_api_operation.result_future.done():
+                self.active_api_operation.result_future.set_exception(
+                    BridgeServiceError(
+                        "Extension disconnected while waiting for API result",
+                        code="DISCONNECTED",
+                        http_status=503,
+                    )
+                )
+
             if self.active_snapshot_operation is not None and not self.active_snapshot_operation.terminal:
                 error_frame = make_error(
                     request_id=self.active_snapshot_operation.request_id,
@@ -202,6 +222,7 @@ class BridgeService:
             self.active_list_operation = None
             self.active_logs_operation = None
             self.active_health_operation = None
+            self.active_api_operation = None
             self.active_snapshot_operation = None
             self._clear_active_operation()
 
@@ -265,7 +286,8 @@ class BridgeService:
                     code="BUSY",
                     http_status=409,
                 )
-            snapshot = SnapshotOperation(request_id=request_id)
+            expected_conversation_id = payload.get("conversationId") if isinstance(payload.get("conversationId"), str) else None
+            snapshot = SnapshotOperation(request_id=request_id, expected_conversation_id=expected_conversation_id)
             self.active_snapshot_operation = snapshot
             self.snapshot_history[request_id] = snapshot
             self._set_active_operation(START_SNAPSHOT, request_id)
@@ -341,6 +363,54 @@ class BridgeService:
                 http_status=504,
             ) from exc
 
+    async def api_call(self, payload: dict[str, Any]) -> dict[str, Any]:
+        method = payload.get("method")
+        endpoint = payload.get("endpoint")
+        if not isinstance(method, str) or not method.strip():
+            raise BridgeServiceError(
+                "API_CALL requires non-empty string field: method",
+                code="UNSUPPORTED",
+                http_status=400,
+            )
+        if not isinstance(endpoint, str) or not endpoint.strip():
+            raise BridgeServiceError(
+                "API_CALL requires non-empty string field: endpoint",
+                code="UNSUPPORTED",
+                http_status=400,
+            )
+
+        session = await self.ensure_command_ready()
+        request_id = f"api-{uuid.uuid4().hex[:10]}"
+
+        async with self.lock:
+            if self.active_operation_type is not None:
+                raise BridgeServiceError(
+                    "Another operation is already running",
+                    code="BUSY",
+                    http_status=409,
+                )
+            api_operation = ApiOperation(request_id=request_id, result_future=asyncio.get_running_loop().create_future())
+            self.active_api_operation = api_operation
+            self._set_active_operation(API_CALL, request_id)
+
+        outbound = make_frame(API_CALL, request_id=request_id, payload=payload)
+        await session.send_frame(outbound)
+        logger.info("event=command_sent type=%s request_id=%s method=%s endpoint=%s", API_CALL, request_id, method, endpoint)
+
+        try:
+            result = await asyncio.wait_for(api_operation.result_future, timeout=DEFAULT_TIMEOUT_SECONDS)
+            return result
+        except asyncio.TimeoutError as exc:
+            async with self.lock:
+                if self.active_api_operation is api_operation:
+                    self.active_api_operation = None
+                    self._clear_active_operation()
+            raise BridgeServiceError(
+                "Timed out waiting for API_RESULT response",
+                code="TIMEOUT",
+                http_status=504,
+            ) from exc
+
     async def get_snapshot_operation(self, request_id: str) -> SnapshotOperation:
         async with self.lock:
             snapshot = self.snapshot_history.get(request_id)
@@ -393,6 +463,9 @@ class BridgeService:
                 return
             if frame_type == HEALTH_RESULT:
                 await self._handle_health_result_locked(frame)
+                return
+            if frame_type == API_RESULT:
+                await self._handle_api_result_locked(frame)
                 return
             if frame_type in {SNAPSHOT_STARTED, CHUNK, DONE, ERROR_FRAME}:
                 await self._handle_snapshot_or_error_locked(frame)
@@ -458,6 +531,24 @@ class BridgeService:
         self.active_health_operation = None
         self._clear_active_operation()
 
+    async def _handle_api_result_locked(self, frame: dict[str, Any]) -> None:
+        request_id = frame.get("requestId")
+        if not isinstance(request_id, str):
+            logger.warning("event=api_result_missing_request_id")
+            return
+
+        api_op = self.active_api_operation
+        if api_op is None or api_op.request_id != request_id:
+            logger.warning("event=api_result_request_mismatch request_id=%s", request_id)
+            return
+
+        payload = frame.get("payload") if isinstance(frame.get("payload"), dict) else {}
+        if not api_op.result_future.done():
+            api_op.result_future.set_result(payload)
+
+        self.active_api_operation = None
+        self._clear_active_operation()
+
     async def _handle_snapshot_or_error_locked(self, frame: dict[str, Any]) -> None:
         frame_type = frame.get("type")
         request_id = frame.get("requestId")
@@ -511,6 +602,19 @@ class BridgeService:
                 self._clear_active_operation()
                 return
 
+            if self.active_api_operation is not None and self.active_api_operation.request_id == request_id:
+                if not self.active_api_operation.result_future.done():
+                    self.active_api_operation.result_future.set_exception(
+                        BridgeServiceError(
+                            error_message if isinstance(error_message, str) else "API call operation failed",
+                            code=error_code if isinstance(error_code, str) else "ERROR",
+                            http_status=409 if error_code == "BUSY" else 500,
+                        )
+                    )
+                self.active_api_operation = None
+                self._clear_active_operation()
+                return
+
         snapshot = self.active_snapshot_operation
         if snapshot is None:
             logger.warning("event=snapshot_frame_without_active_operation type=%s request_id=%s", frame_type, request_id)
@@ -524,6 +628,32 @@ class BridgeService:
                 snapshot.request_id,
             )
             return
+
+        if frame_type == SNAPSHOT_STARTED:
+            payload = frame.get("payload") if isinstance(frame.get("payload"), dict) else {}
+            started_conversation_id = payload.get("conversationId") if isinstance(payload.get("conversationId"), str) else None
+            snapshot.started_conversation_id = started_conversation_id
+            if snapshot.expected_conversation_id is not None and started_conversation_id is not None and started_conversation_id != snapshot.expected_conversation_id:
+                logger.error(
+                    "event=snapshot_target_mismatch request_id=%s expected_conversation_id=%s actual_conversation_id=%s",
+                    request_id,
+                    snapshot.expected_conversation_id,
+                    started_conversation_id,
+                )
+                mismatch_error = make_frame(
+                    ERROR_FRAME,
+                    request_id=snapshot.request_id,
+                    payload={
+                        "code": "TARGET_MISMATCH",
+                        "expectedConversationId": snapshot.expected_conversation_id,
+                        "actualConversationId": started_conversation_id,
+                    },
+                    error="Snapshot started for a different conversation than requested",
+                )
+                await snapshot.publish(mismatch_error)
+                self.active_snapshot_operation = None
+                self._clear_active_operation()
+                return
 
         await snapshot.publish(frame)
 

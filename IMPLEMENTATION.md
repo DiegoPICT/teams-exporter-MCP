@@ -141,9 +141,9 @@ Status: completed and verified with local emulators and `testing/smoke_phase2.py
 
 ## Immediate Next Steps
 
-1. **MCP v2 Parity (Extension + Bridge)**: finish remaining v2 transactions beyond `GET_LOGS`/`HEALTH`.
-   - `START_SNAPSHOT` targeted semantics for explicit `conversationId` override behavior.
-   - generic `API_CALL` / `API_RESULT` pass-through with allowlist guardrails.
+1. **MCP v2 Parity (Extension + Bridge)**: align remaining extension-side implementation with now-available bridge contracts.
+   - targeted `START_SNAPSHOT` semantics are now enforced in bridge with deterministic mismatch error (`TARGET_MISMATCH`).
+   - generic bridge transaction is now available: `API_CALL` / `API_RESULT` via northbound `POST /extensions/api-call`.
 2. Formalize and version northbound response schemas for MCP consumption.
 3. Add richer stream diagnostics and per-operation metrics.
 4. Add integration tests around disconnect and `CONTEXT_LOST` terminal semantics.
@@ -172,6 +172,11 @@ Completed in this iteration:
   - northbound `POST /extensions/logs`
   - northbound `POST /extensions/health`
   - session metadata now includes `protocol` and `extensionVersion` when provided by extension `HELLO`.
+- Implemented bridge-side v2 transaction and determinism guardrails:
+  - southbound `API_CALL` -> `API_RESULT`
+  - northbound `POST /extensions/api-call`
+  - thin bridge input validation for API calls (`method`, `endpoint` required non-empty strings)
+  - deterministic snapshot target mismatch handling (`TARGET_MISMATCH`) when `SNAPSHOT_STARTED` reports a different `conversationId` than requested.
 
 ## Phase 3: Real Snapshot Streaming
 
