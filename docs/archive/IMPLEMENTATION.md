@@ -190,6 +190,24 @@ Latest runtime validation (2026-06-09):
   - failing target path produced terminal error (no wrong-chat silent fallback observed).
 - API verb matrix checks (`GET`, `POST`, `PATCH`, `PUT`, `DELETE`) all passed through bridge transaction path; upstream Teams returned `401` in current auth context.
 
+## Known Issues
+
+- Target mismatch handling currently emits terminal `ERROR` (`TARGET_MISMATCH`) and clears the bridge-side active snapshot immediately, but does not explicitly cancel the extension-side in-flight snapshot. This can temporarily desynchronize bridge vs extension operation state.
+- Targeted snapshot determinism currently depends on `SNAPSHOT_STARTED.payload.conversationId`. If targeted mode is requested and that field is absent, the bridge does not yet emit a deterministic mismatch-style terminal error.
+- `API_CALL` error mapping is still coarse. Non-`BUSY` extension-side failures usually collapse into generic 500 responses, which reduces caller-side diagnosability for actionable cases like validation or context errors.
+- Manual runtime validation confirms bridge transaction correctness for `GET_LOGS`, `HEALTH`, and `API_CALL`, but current Teams API calls are still returning `401` in the active auth context.
+
+## TODO
+
+- On `TARGET_MISMATCH`, send explicit southbound `CANCEL` on a best-effort basis before finalizing bridge-side operation cleanup.
+- Strengthen targeted determinism contract so targeted mode fails deterministically when `SNAPSHOT_STARTED.payload.conversationId` is missing or not confirmable.
+- Improve `API_CALL` error translation so northbound responses preserve more actionable error classes/statuses.
+- Add automated coverage for:
+  - targeted mismatch and missing-started-id paths
+  - `API_CALL` request/response/error correlation
+  - disconnect during in-flight API operations
+- Add a repeatable validation script/matrix for diagnostics endpoints and generic API transaction smoke checks.
+
 ## Phase 3: Real Snapshot Streaming
 
 Objective: connect protocol handlers to real extension-exported data flow.

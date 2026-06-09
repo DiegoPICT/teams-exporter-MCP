@@ -5,6 +5,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 
@@ -72,6 +73,9 @@ def consume_sse(url: str, timeout: float, max_seconds: float) -> list[dict[str, 
 
 def base_url(host: str, port: int) -> str:
     return f"http://{host}:{port}"
+
+
+OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 
 
 def extract_title(item: dict[str, Any]) -> str | None:
@@ -230,10 +234,13 @@ def run_specific_chat(base: str, timeout: float, events_timeout: float, chat_ind
         "messages": all_messages,
     }
 
-    with open(filename, "w", encoding="utf-8") as f:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = OUTPUT_DIR / filename
+
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(export_data, f, indent=2, ensure_ascii=False)
 
-    print(f"\n[consumer] Exported {len(all_messages)} messages to {filename}")
+    print(f"\n[consumer] Exported {len(all_messages)} messages to {output_path}")
 
 
 def run_extension_api_call(

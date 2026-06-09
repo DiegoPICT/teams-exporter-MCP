@@ -1,97 +1,93 @@
-# teams-chat-gw-bridge-mcp
+# Teams Chat Gateway Bridge
 
-Local bridge service for Teams Chat Exporter, with a strict separation between:
+Experimental local bridge for a Teams chat exporter workflow.
 
-- southbound extension WebSocket transport
-- northbound app/API verb interface
+This repository contains a small FastAPI-based bridge that maintains one local WebSocket session with an extension-side client and exposes a northbound HTTP API for local tools and automation.
 
-This repository currently has Phase 1 and Phase 2 completed, and is preparing Phase 3 real streaming integration.
+This repository does not include the extension implementation itself.
 
-## Current Status
+This project is not affiliated with or endorsed by Microsoft.
 
-- Phase 1 complete: extension can connect to a local bridge and complete `HELLO` -> `HELLO_ACK`.
-- Phase 2 complete: command/state skeleton and baseline observability are implemented.
-- Phase 3 complete: northbound verbs drive real southbound streaming; remaining reliability follow-up is focused on occasional disconnect behavior.
-- Auto-reload enabled for local development (`python -m bridge`).
-- Canonical logging is enabled to console and `log/bridge.log`.
-- Canonical frame helper is in place for consistent protocol envelopes.
-- Bridge-side v2 additions are live for diagnostics and generic API transactions (`GET_LOGS`, `HEALTH`, `API_CALL`).
+## Status
 
-## Documentation Map
+- The runtime is currently in code-freeze mode.
+- Current work is limited to repository hygiene, documentation, and public-release hardening.
+- Technical limitations are documented in `KNOWN_ISSUES.md` and `TODO.md` instead of being addressed in code during this phase.
 
-- `README.md`: project quickstart and document index
-- `DESIGN.md`: architecture overview (high level)
-- `SOUTHBOUND.md`: extension-facing WebSocket interface boundary
-- `NORTHBOUND.md`: app/API-facing verb interface boundary
-- `WEBSOCKET_BRIDGE_MCP_DESIGN.md`: protocol-level contract details
-- `IMPLEMENTATION.md`: phased delivery status and backlog
-- `V2_FEATURE_INTENTS.md`: objectives and deterministic intent for remaining v2 features
-- `BRIDGEv2_IMPL.md`: bridge-side implementation plan for remaining v2 features
-- `EXTENSIONv2_IMPL.md`: extension-side implementation plan for remaining v2 features
-- `EXTENSIONSv2.md`: discovered extension issues and v2 protocol recommendations
+## Security and Privacy
+
+- Treat this bridge as local-only software.
+- The current HTTP and WebSocket surfaces are unauthenticated.
+- Keep the bridge bound to `127.0.0.1` unless you are intentionally adding a security layer in front of it.
+- Runtime logs, status data, and exported chat snapshots may contain sensitive metadata or content.
+- See `SECURITY.md` and `KNOWN_ISSUES.md` before publishing logs, screenshots, or exported data.
 
 ## Quick Start
 
 1. Create and activate a virtual environment.
 2. Install dependencies.
-3. Run the bridge.
+3. Copy `.env.example` to `.env` if you want to override defaults.
+4. Run the bridge.
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python -m bridge
+cp .env.example .env
+python3 -m bridge
 ```
 
-Default endpoint:
+Default endpoints:
 
-- `ws://127.0.0.1:8765/ws`
+- WebSocket: `ws://127.0.0.1:8765/ws`
+- HTTP: `http://127.0.0.1:8765`
 
-## Configuration
+## Current API Surface
 
-Runtime settings are loaded from `.env`:
+Observability:
 
-```env
-BRIDGE_HOST=127.0.0.1
-BRIDGE_PORT=8765
-BRIDGE_PATH=/ws
-```
+- `GET /health`
+- `GET /bridge/status`
 
-## Logs
+Operations:
 
-- File logs: `log/bridge.log`
-- Console logs: standard output
+- `GET /conversations`
+- `POST /snapshots`
+- `GET /snapshots/{requestId}/events`
+- `POST /snapshots/{requestId}/cancel`
+- `POST /extensions/logs`
+- `POST /extensions/health`
+- `POST /extensions/api-call`
 
-Expected Phase 1 lifecycle events include:
+## Documentation
 
-- `event=bridge_started`
-- `event=client_connected`
-- `event=hello_received`
-- `event=hello_ack_sent`
-- `event=client_disconnected`
+- `docs/architecture.md`: high-level system boundaries and data flow
+- `docs/northbound-api.md`: local HTTP API summary
+- `docs/southbound-protocol.md`: WebSocket protocol summary and state model
+- `docs/development-testing.md`: local development and manual testing notes
+- `KNOWN_ISSUES.md`: current limitations and public caveats
+- `TODO.md`: parked improvements and future hardening work
+- `SECURITY.md`: security posture, reporting guidance, and data-handling notes
 
-## Testing
-
-Standalone local emulators are available:
-
-- Consumer emulator: `testing/emulate_consumer.py`
-
-Usage guide:
-
-- `testing/README.md`
+Historical planning and implementation notes are preserved under `docs/archive/`.
 
 ## Repository Layout
 
-- `bridge.py`: current FastAPI runtime (phase-1/phase-2 implementation)
-- `frame_helper.py`: canonical frame builder utilities
-- `logging_helper.py`: logger setup (console + rotating file)
-- `testing/`: local emulation scripts for consumer behavior
-- `SOUTHBOUND.md`: southbound extension transport contract
-- `NORTHBOUND.md`: northbound app verb contract
-- `IMPLEMENTATION.md`: phased delivery plan and status
-- `DESIGN.md`: target architecture and data flow
-- `WEBSOCKET_BRIDGE_MCP_DESIGN.md`: protocol-level contract and semantics
+- `bridge.py`: FastAPI application entrypoint and WebSocket route
+- `service.py`: bridge state machine and operation coordination
+- `northbound.py`: HTTP routes and SSE streaming
+- `southbound.py`: WebSocket session adapter
+- `frame_helper.py`: canonical frame helpers
+- `logging_helper.py`: canonical logging setup
+- `testing/emulate_consumer.py`: manual local consumer harness
+- `testing/output/`: ignored local exports created by the test harness
 
-## Next Up (Phase 4)
+## Public Repo Notes
 
-Gap analysis and planning for the MCP adapter wrapper.
+- Local artifact hygiene is enforced through `.gitignore`.
+- The consumer test harness now writes exports to `testing/output/` instead of the repo root.
+- Historical path checks on reachable git history did not show committed `.env`, log files, chat export JSON, `__pycache__`, or `.venv` contents.
+
+## Contributing
+
+See `CONTRIBUTING.md` before opening a pull request. During the current code freeze, docs, security hygiene, and repo presentation improvements are preferred over runtime changes.

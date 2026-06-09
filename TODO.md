@@ -1,0 +1,34 @@
+# TODO
+
+This file tracks parked improvements that are intentionally not being implemented during the current cleanup phase.
+
+## Security and Hardening
+
+- Add authentication and authorization for northbound endpoints.
+- Add origin and session validation for the southbound WebSocket.
+- Narrow the exposure of session metadata in status and logs.
+- Add explicit retention limits for snapshot history and streamed events.
+
+## API and Validation
+
+- Replace raw `dict` request bodies with typed request models.
+- Improve `API_CALL` validation and preserve richer upstream error information.
+- Review handshake ordering so only validated extension clients become the active session.
+
+## Testing and Automation
+
+- Add automated tests for handshake validation, disconnect handling, SSE delivery, and timeout paths.
+- Add a lightweight CI workflow for linting, smoke tests, and basic repository checks.
+- Add release notes or changelog discipline once the repo moves beyond prototype status.
+
+## Project Hygiene
+
+- Select and add an explicit open-source license.
+- Decide whether the public default branch should remain `master` or be renamed to `main`.
+- Decide whether to publish companion extension code separately or keep this repository bridge-only.
+
+## Product and Protocol Work
+
+- Add MCP adapter work when the code freeze is lifted.
+- Revisit disconnect and reconnect behavior once feature work resumes.
+- Revisit protocol ergonomics and error semantics after automated coverage exists.
