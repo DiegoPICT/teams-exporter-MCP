@@ -11,10 +11,11 @@ This repository currently has Phase 1 and Phase 2 completed, and is preparing Ph
 
 - Phase 1 complete: extension can connect to a local bridge and complete `HELLO` -> `HELLO_ACK`.
 - Phase 2 complete: command/state skeleton and baseline observability are implemented.
-- Phase 3 complete (with known bugs): northbound verbs drive real southbound streaming, but there are context-sync and export naming bugs to resolve.
+- Phase 3 complete: northbound verbs drive real southbound streaming; remaining reliability follow-up is focused on occasional disconnect behavior.
 - Auto-reload enabled for local development (`python -m bridge`).
 - Canonical logging is enabled to console and `log/bridge.log`.
 - Canonical frame helper is in place for consistent protocol envelopes.
+- Bridge-side v2 additions are live for diagnostics and generic API transactions (`GET_LOGS`, `HEALTH`, `API_CALL`).
 
 ## Documentation Map
 

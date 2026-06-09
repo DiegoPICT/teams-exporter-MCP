@@ -37,6 +37,7 @@ Verified runtime behavior:
 - Snapshot event streaming is available via `/snapshots/{requestId}/events` (SSE).
 - Extension diagnostics are now queryable through northbound `POST /extensions/logs` (maps to southbound `GET_LOGS`).
 - Extension runtime metadata is now queryable through northbound `POST /extensions/health` (maps to southbound `HEALTH` / `HEALTH_RESULT`).
+- Generic extension API transaction is now queryable through northbound `POST /extensions/api-call` (maps to southbound `API_CALL` / `API_RESULT`).
 
 Notes:
 
@@ -177,6 +178,17 @@ Completed in this iteration:
   - northbound `POST /extensions/api-call`
   - thin bridge input validation for API calls (`method`, `endpoint` required non-empty strings)
   - deterministic snapshot target mismatch handling (`TARGET_MISMATCH`) when `SNAPSHOT_STARTED` reports a different `conversationId` than requested.
+
+Latest runtime validation (2026-06-09):
+
+- `POST /extensions/health`: successful runtime metadata response.
+- `POST /extensions/logs`: successful log retrieval.
+- `POST /extensions/api-call` valid payload: returns pass-through envelope (`status`, `data`, `error`).
+- `POST /extensions/api-call` invalid payload: deterministic 400 (`UNSUPPORTED`) for missing `method` or `endpoint`.
+- Snapshot targeting checks:
+  - targeted starts matched requested ids across sampled chats,
+  - failing target path produced terminal error (no wrong-chat silent fallback observed).
+- API verb matrix checks (`GET`, `POST`, `PATCH`, `PUT`, `DELETE`) all passed through bridge transaction path; upstream Teams returned `401` in current auth context.
 
 ## Phase 3: Real Snapshot Streaming
 

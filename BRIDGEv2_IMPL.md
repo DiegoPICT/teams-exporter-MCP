@@ -1,5 +1,7 @@
 # Bridge v2 Implementation Plan (Remaining Features)
 
+Implementation status: bridge-side scope in this plan is now delivered.
+
 This document defines the bridge-side implementation plan for the remaining v2 scope, aligned with:
 
 - `V2_FEATURE_INTENTS.md`
@@ -26,6 +28,31 @@ Out of scope (parked):
 - Extension/runtime reconnect policy tuning (`1001` reliability follow-up)
 - Proactive context push frames
 - Queueing / iterator redesign
+
+## Delivery Snapshot (2026-06-09)
+
+Delivered on bridge side:
+
+- `API_CALL` / `API_RESULT` transaction support in core service routing.
+- Northbound endpoint `POST /extensions/api-call`.
+- Thin bridge validation for API payload shape:
+  - `method` required, non-empty string
+  - `endpoint` required, non-empty string
+- Snapshot targeting determinism guard for targeted mode:
+  - operation captures expected `conversationId`
+  - `SNAPSHOT_STARTED.payload.conversationId` is checked
+  - mismatch emits terminal `ERROR` with `payload.code: TARGET_MISMATCH`
+
+Validation executed in live runtime:
+
+- `POST /extensions/health`: pass
+- `POST /extensions/logs`: pass
+- `POST /extensions/api-call` valid payload: pass-through contract works (`status`, `data`, `error`)
+- `POST /extensions/api-call` malformed payload: deterministic `400` + `UNSUPPORTED`
+- Targeted snapshots:
+  - multiple chats returned matching requested/start ids
+  - non-resolvable target path returned terminal error (no silent fallback)
+- Verb matrix (`GET`, `POST`, `PATCH`, `PUT`, `DELETE`): all accepted by bridge path; upstream responded `401` (`HTTP_ERROR`) in current session context.
 
 ## Guardrail Decision
 

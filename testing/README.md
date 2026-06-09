@@ -24,20 +24,24 @@ Make sure the real Teams Extension is connected to the bridge.
 
 ## Consumer Emulator
 
-Exercises northbound bridge behavior over HTTP (`/conversations`, `/snapshots`, `/snapshots/{requestId}/cancel`).
-
-```bash
-python testing/emulate_consumer.py --mode all
-```
+Exercises northbound bridge behavior over HTTP (`/conversations`, `/snapshots`, `/snapshots/{requestId}/cancel`, `/extensions/api-call`).
 
 Useful modes:
 
-- `--mode list`
-- `--mode snapshot`
-- `--mode full-sync`
-- `--mode export`
-- `--mode cancel`
-- `--mode all`
+- `--mode status`
+- `--mode list-chats`
+- `--mode active-chat`
+- `--mode specific-chat --chat-index 3`
+- `--mode extension-api --api-method GET --api-endpoint /api/chats`
+
+Examples:
+
+```bash
+python testing/emulate_consumer.py --mode list-chats
+python testing/emulate_consumer.py --mode active-chat
+python testing/emulate_consumer.py --mode specific-chat --chat-index 1
+python testing/emulate_consumer.py --mode extension-api --api-method GET --api-endpoint /api/chats
+```
 
 ## Important Notes
 
