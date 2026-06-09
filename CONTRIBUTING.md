@@ -8,10 +8,11 @@
 
 ## Before Opening a Pull Request
 
-- Read `README.md`, `SECURITY.md`, `KNOWN_ISSUES.md`, and `TODO.md`.
+- Read `README.md`, `docs/README.md`, `docs/companion-project.md`, `SECURITY.md`, `KNOWN_ISSUES.md`, and `TODO.md`.
 - Keep changes small and easy to review.
 - Avoid mixing repo-cleanup work with unrelated runtime changes.
 - Do not commit `.env`, logs, exported chat snapshots, or local test artifacts.
+- If behavior changes are proposed, call out companion-extension impact explicitly.
 
 ## Development Notes
 

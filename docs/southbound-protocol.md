@@ -4,6 +4,8 @@
 
 The southbound interface is the WebSocket connection between the local bridge and an extension-side client.
 
+Canonical dependency context for the companion extension is documented in `docs/companion-project.md`.
+
 ## Transport
 
 - default endpoint: `ws://127.0.0.1:8765/ws`
@@ -53,6 +55,8 @@ Extension to bridge responses and events:
 - `HEALTH_RESULT`
 - `API_RESULT`
 - `ERROR`
+
+These frame expectations are defined by the bridge-companion pairing and are not claimed to be cross-fork universal.
 
 ## State and Operation Rules
 

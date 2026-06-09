@@ -13,11 +13,15 @@ python3 -m bridge
 
 Use `.env.example` if you want a starting point for local configuration.
 
+Before running bridge tests, ensure the companion extension branch documented in `docs/companion-project.md` is available and connected.
+
 ## Manual Test Harness
 
 The repository includes one manual consumer harness:
 
 - `testing/emulate_consumer.py`
+
+This harness validates bridge behavior against the companion extension transaction model, not arbitrary extension forks.
 
 Example commands:
 

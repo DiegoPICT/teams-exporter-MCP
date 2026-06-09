@@ -9,6 +9,8 @@ The bridge separates two interfaces:
 
 The core bridge service sits between those interfaces and owns session state, operation state, correlation, and lifecycle handling.
 
+See `docs/companion-project.md` for the canonical bridge-to-extension dependency anchor.
+
 ## High-Level Shape
 
 ```mermaid
@@ -38,3 +40,5 @@ flowchart LR
 ## Current Intent
 
 The repository is being prepared for public consumption without changing runtime behavior. Design follow-ups and implementation gaps are tracked in `KNOWN_ISSUES.md` and `TODO.md`.
+
+The bridge remains intentionally coupled to the companion extension branch documented in `docs/companion-project.md`.

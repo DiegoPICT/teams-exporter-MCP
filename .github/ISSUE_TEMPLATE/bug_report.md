@@ -15,6 +15,7 @@ Describe the problem.
 - OS:
 - Python version:
 - Bridge commit or branch:
+- Companion extension ref (commit/branch):
 
 ## Steps to Reproduce
 

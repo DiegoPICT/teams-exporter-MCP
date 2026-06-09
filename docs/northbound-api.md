@@ -4,6 +4,8 @@
 
 The northbound API is the local consumer-facing interface of the bridge. It translates local HTTP requests into bridge operations without exposing raw extension frame contracts directly.
 
+Its behavior is companion-coupled to the extension branch documented in `docs/companion-project.md`.
+
 ## Endpoints
 
 Observability:
@@ -28,6 +30,8 @@ Operations:
 - `GET /snapshots/{requestId}/events` streams operation events as server-sent events.
 - `POST /snapshots/{requestId}/cancel` requests cancellation for the active snapshot.
 - `POST /extensions/logs`, `POST /extensions/health`, and `POST /extensions/api-call` pass through extension-side diagnostics or API transactions.
+
+For extension-side MCP transaction semantics, see the companion extension reference linked from `docs/companion-project.md`.
 
 ## Error Surface
 

@@ -33,5 +33,6 @@
 
 ## Scope
 
-- This repository only contains the local bridge and manual test harness.
-- If an issue depends on private extension code or external services, report the bridge-side impact and any known dependencies clearly.
+- This repository contains the local bridge and manual test harness.
+- Runtime operation depends on the companion extension project documented in `docs/companion-project.md`.
+- If an issue depends on extension behavior or external services, report the bridge-side impact and include the companion extension ref used during reproduction.

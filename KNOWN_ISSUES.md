@@ -21,6 +21,12 @@ This repository is intentionally documenting current limitations instead of addr
 - The runtime defaults are still development-oriented, including hot reload in the local entrypoint.
 - The bridge currently supports one connected extension session and one active operation at a time.
 
+## Companion Coupling
+
+- This bridge depends on the companion extension branch documented in `docs/companion-project.md`.
+- Behavioral drift in that companion extension can break bridge expectations and transaction compatibility.
+- Compatibility with unrelated extension forks or branches is not guaranteed.
+
 ## Testing and Release Readiness
 
 - The repository currently relies on manual validation rather than automated unit or integration tests.

@@ -6,13 +6,22 @@ This repository contains a small FastAPI-based bridge that maintains one local W
 
 This repository does not include the extension implementation itself.
 
-This project is not affiliated with or endorsed by Microsoft.
-
 ## Status
 
 - The runtime is currently in code-freeze mode.
 - Current work is limited to repository hygiene, documentation, and public-release hardening.
 - Technical limitations are documented in `KNOWN_ISSUES.md` and `TODO.md` instead of being addressed in code during this phase.
+
+## Companion Project Dependency
+
+This bridge is designed to operate as the companion service for the extension work in:
+
+- `https://github.com/DiegoPICT/teams-web-chat-exporter/tree/mcp-extension-targeted-snapshot-api-call`
+- `https://github.com/DiegoPICT/teams-web-chat-exporter/blob/mcp-extension-targeted-snapshot-api-call/docs/EXTENSION_FOR_MCP.md`
+
+The extension and bridge form one operational pair. The extension owns in-browser Teams runtime behavior, while this repository owns local orchestration and northbound API access.
+
+Canonical dependency and compatibility guidance is maintained in `docs/companion-project.md`.
 
 ## Security and Privacy
 
@@ -61,6 +70,8 @@ Operations:
 
 ## Documentation
 
+- `docs/README.md`: documentation index and reading order
+- `docs/companion-project.md`: canonical bridge-to-extension dependency contract
 - `docs/architecture.md`: high-level system boundaries and data flow
 - `docs/northbound-api.md`: local HTTP API summary
 - `docs/southbound-protocol.md`: WebSocket protocol summary and state model
@@ -69,7 +80,7 @@ Operations:
 - `TODO.md`: parked improvements and future hardening work
 - `SECURITY.md`: security posture, reporting guidance, and data-handling notes
 
-Historical planning and implementation notes are preserved under `docs/archive/`.
+Historical implementation notes remain under `docs/archive/` as non-canonical reference material.
 
 ## Repository Layout
 
@@ -91,3 +102,9 @@ Historical planning and implementation notes are preserved under `docs/archive/`
 ## Contributing
 
 See `CONTRIBUTING.md` before opening a pull request. During the current code freeze, docs, security hygiene, and repo presentation improvements are preferred over runtime changes.
+
+## Disclaimer
+
+This project is provided to work within the user's existing environment and operational context. You are solely responsible for using, configuring, and operating it in a way that complies with all applicable vendor terms, internal company policies, security requirements, and Microsoft terms of service.
+
+This project is an independent effort and is not affiliated with, sponsored by, endorsed by, or approved by Microsoft.

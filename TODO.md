@@ -23,9 +23,9 @@ This file tracks parked improvements that are intentionally not being implemente
 
 ## Project Hygiene
 
-- Select and add an explicit open-source license.
 - Decide whether the public default branch should remain `master` or be renamed to `main`.
-- Decide whether to publish companion extension code separately or keep this repository bridge-only.
+- Keep bridge docs deduplicated around `docs/companion-project.md` as the single source of truth for extension dependency.
+- Add a lightweight compatibility matrix mapping bridge commits to tested companion extension refs.
 
 ## Product and Protocol Work
 
