@@ -26,6 +26,7 @@ This repository currently has Phase 1 and Phase 2 completed, and is preparing Ph
 - `IMPLEMENTATION.md`: phased delivery status and backlog
 - `V2_FEATURE_INTENTS.md`: objectives and deterministic intent for remaining v2 features
 - `BRIDGEv2_IMPL.md`: bridge-side implementation plan for remaining v2 features
+- `EXTENSIONv2_IMPL.md`: extension-side implementation plan for remaining v2 features
 - `EXTENSIONSv2.md`: discovered extension issues and v2 protocol recommendations
 
 ## Quick Start
