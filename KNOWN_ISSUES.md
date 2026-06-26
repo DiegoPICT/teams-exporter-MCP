@@ -26,6 +26,8 @@ This repository is intentionally documenting current limitations instead of addr
 - This bridge depends on the companion extension branch documented in `docs/companion-project.md`.
 - Behavioral drift in that companion extension can break bridge expectations and transaction compatibility.
 - Compatibility with unrelated extension forks or branches is not guaranteed.
+- **Inactivity Disconnects (MV3 Service Worker):** Because the companion extension uses a Manifest V3 Service Worker, Chrome/Edge terminates the background script after 30 seconds of inactivity. This tears down the WebSocket, resulting in an automatic `1001 (Going Away)` socket disconnect.
+- **Status Desynchronization:** Because the companion extension tracks the MCP connection state in volatile, in-memory variables instead of persistent storage, a Service Worker restart resets its status to `DISCONNECTED`, causing the extension popup to show a disconnected status even if the user had previously established a connection.
 
 ## Testing and Release Readiness
 
