@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -131,12 +132,33 @@ async def extension_websocket(websocket: WebSocket, full_path: str) -> None:
         logger.info("event=hello_ack_sent")
 
         while True:
-            raw_message = await websocket.receive_text()
+            try:
+                raw_message = await asyncio.wait_for(websocket.receive_text(), timeout=15.0)
+            except asyncio.TimeoutError:
+                logger.info("event=idle_timeout_sending_ping client=%s", client)
+                try:
+                    await session.send_frame(make_frame("PING"))
+                except Exception as exc:
+                    logger.error("event=failed_to_send_ping client=%s error=%s", client, str(exc))
+                    break
+                continue
+
             try:
                 frame = parse_json_message(raw_message)
             except ValueError as exc:
                 logger.warning("event=invalid_frame client=%s error=%s", client, str(exc))
                 await session.send_frame(make_frame("ERROR", payload={"code": "UNSUPPORTED"}, error=str(exc)))
+                continue
+
+            frame_type = frame.get("type")
+
+            if frame_type == "PING":
+                logger.info("event=ping_received client=%s", client)
+                await session.send_frame(make_frame("PONG", request_id=frame.get("requestId")))
+                continue
+
+            if frame_type == "PONG":
+                logger.info("event=pong_received client=%s", client)
                 continue
 
             await service.handle_extension_frame(frame)
