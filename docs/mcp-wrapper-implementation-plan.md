@@ -2,54 +2,88 @@
 
 ## Document Status
 
-- Status: canonical planning document
-- Scope: MCP wrapper implementation only
-- Runtime constraint: bridge protocol/state behavior remains in existing bridge modules
+- Status: canonical implementation plan
+- Scope: MCP wrapper only
+- Bridge constraint: bridge runtime and contracts are established for this iteration; no bridge code changes
 
-## 1) Why This Plan Exists
+## 1) Purpose and Constraints
 
-The repository now treats MCP as the primary consumer-facing direction. This document defines how to implement that MCP layer without collapsing architecture boundaries.
+This repository now treats MCP as the primary consumer-facing interface. The MCP wrapper must expose bridge business capabilities while preserving strict architectural boundaries.
 
-To avoid duplication, this plan references existing canonical docs for bridge behavior:
+Bridge behavior and contracts remain documented in:
 
-- bridge architecture and boundaries: `docs/architecture.md`
-- bridge northbound HTTP/SSE surface: `docs/northbound-api.md`
-- bridge southbound protocol semantics: `docs/southbound-protocol.md`
-- companion extension dependency: `docs/companion-project.md`
+- `docs/architecture.md`
+- `docs/northbound-api.md`
+- `docs/southbound-protocol.md`
+- `docs/companion-project.md`
 
-This plan does not restate those contracts; it defines wrapper-specific implementation decisions.
+This plan only defines wrapper-side implementation.
 
-## 2) Layering Contract (Non-Negotiable)
+## 2) Non-Negotiable Layering Contract
 
 The MCP wrapper is a northbound adapter over bridge HTTP/SSE.
 
 The wrapper must not:
 
 - import or call bridge internals (`service.py`, `southbound.py`, frame helpers)
-- own extension protocol state semantics
-- duplicate bridge operation coordination logic
+- duplicate bridge protocol/state semantics
+- reimplement extension operation coordination
 
-The wrapper may only call the bridge endpoints documented in `docs/northbound-api.md`.
+The wrapper may only call bridge endpoints already defined in `docs/northbound-api.md`.
 
-## 3) Transport Decision
+## 3) Normative MCP Baseline
 
-### 3.1 First Delivery Transport
+Wrapper implementation must follow the MCP specification (current authoritative baseline as of this plan):
 
-Initial MCP transport target is HTTP listener mode to support cross-environment use (for example, bridge and wrapper in WSL, MCP client on Windows).
+- protocol baseline: `2025-06-18`
+- lifecycle and capability negotiation
+- streamable HTTP transport semantics
+- tools contract and error model
+- progress and cancellation utilities
 
-### 3.2 Transport Architecture Rule
+If a newer official MCP version is adopted, the wrapper should negotiate it during initialization and maintain compatibility with supported versions.
 
-Tool logic must be transport-agnostic so additional transports can be added later without rewriting business behavior.
+## 4) Transport Decision and Server Shape
 
-### 3.3 Local-Only Safety
+### 4.1 First Delivery Transport
 
-Default listener binding remains local-only and should not introduce new remote exposure by default.
+Initial transport is MCP Streamable HTTP to support cross-environment usage (for example, bridge + wrapper in WSL, MCP client on Windows).
 
-## 4) MCP v1 Business Scope
+### 4.2 Required Streamable HTTP Semantics
 
-The wrapper should expose business capabilities of the bridge as MCP tools with explicit intent-oriented names.
+The wrapper server must implement MCP transport rules, including:
 
-### 4.1 Required Tools
+- one MCP endpoint path supporting `POST` and `GET`
+- JSON-RPC 2.0 request/response/notification messages
+- content negotiation for `application/json` and `text/event-stream`
+- `MCP-Protocol-Version` handling after initialization
+- optional `Mcp-Session-Id` session flow if session mode is enabled
+
+### 4.3 Local-Only Defaults
+
+- bind localhost by default
+- no remote exposure by default
+- document explicit operator steps if non-local binding is required
+
+## 5) Lifecycle and Capability Plan
+
+The wrapper must implement full MCP lifecycle:
+
+1. `initialize` handling with protocol version negotiation
+2. declared server capabilities in initialize result
+3. transition to operation phase only after `notifications/initialized`
+
+Planned server capabilities:
+
+- required: `tools`
+- optional in v1: `resources`, `logging`
+- optional/future: `prompts`, `completions`
+
+`tools.listChanged` should be set based on whether tool registration is static or runtime-dynamic.
+
+## 6) MCP v1 Business Tool Scope
+
+### 6.1 Required Business Tools
 
 - `list_conversations`
 - `snapshot_current_chat`
@@ -57,215 +91,312 @@ The wrapper should expose business capabilities of the bridge as MCP tools with 
 - `cancel_snapshot`
 - `teams_api_call`
 
-### 4.2 Secondary Operational Tools
+### 6.2 Secondary Operational Surface
 
-These are useful for diagnostics and should be implemented as phase-scoped extras after required tools:
+Potential secondary capability after required tools are stable:
 
 - `bridge_status`
 - `extension_health`
 - `extension_logs`
 
-## 5) Tool Contract Strategy
+Read-only operational data should be considered as resources first when client UX supports resources well.
 
-### 5.1 Intent-Based Interface
+## 7) Tool Contract Strategy
 
-MCP tools should reflect user intent, not raw bridge endpoint names.
+### 7.1 Intent-Based Naming
+
+Tool names should express user intent, not raw bridge endpoint names.
 
 Examples:
 
-- `snapshot_current_chat` calls `POST /snapshots` without `conversationId`
-- `snapshot_chat_by_id` calls `POST /snapshots` with `conversationId`
+- `snapshot_current_chat` -> `POST /snapshots` without `conversationId`
+- `snapshot_chat_by_id` -> `POST /snapshots` with `conversationId`
 
-### 5.2 Thin, Non-Duplicative Outputs
+### 7.2 Thin and Non-Duplicative Outputs
 
-Wrapper outputs should be stable and minimal while preserving bridge payloads where helpful.
+Wrapper output should be stable but thin:
 
-Rules:
+- preserve bridge payload fidelity where possible
+- avoid deep schema remapping of conversation/message domain models
+- include operation correlation metadata (`requestId`)
 
-- do not create a second deep domain schema for conversation/message models
-- avoid lossy transformations of bridge/extension payload content
-- include `requestId` and key operation metadata for traceability
+### 7.3 JSON Schema Requirements
 
-### 5.3 Validation Boundaries
+For each MCP tool definition:
 
-Wrapper validates MCP tool input shape only. Bridge and extension remain authoritative for operation/runtime semantics.
+- provide `inputSchema`
+- provide `outputSchema` for structured outputs when practical
 
-## 6) Error Mapping Contract
+If `outputSchema` is declared, wrapper responses must conform.
 
-Centralize error mapping in one module.
+## 8) Draft Tool Schemas (v1 Targets)
 
-Baseline mapping:
+These are target contracts for MCP tool definitions.
 
-- `BUSY` -> conflict/retryable
-- `CONTEXT_LOST` -> user action required (reconnect/restore Teams context)
-- `DISCONNECTED` -> unavailable (extension not connected)
-- `TIMEOUT` -> upstream timeout
-- `UNSUPPORTED` -> invalid request/unsupported path
-- unknown failures -> adapter error with preserved details
+`list_conversations`
 
-Mapping rules:
+- Input:
+  - optional `includeFolders` (boolean, default `true`)
+- Output:
+  - `requestId` (string | null)
+  - `conversations` (array<object>)
+  - `folders` (array<object>, optional)
+  - `raw` (object, optional)
 
-- preserve original bridge code, status, message, and request correlation
-- provide concise human-actionable guidance
-- do not swallow upstream diagnostics
+`snapshot_current_chat`
 
-## 7) Snapshot Streaming Behavior
+- Input:
+  - optional `startAt` (RFC3339 timestamp)
+  - optional `endAt` (RFC3339 timestamp)
+  - optional `includeReplies` (boolean)
+  - optional `includeReactions` (boolean)
+  - optional `includeSystem` (boolean)
+- Output (terminal structured result):
+  - `requestId` (string)
+  - `status` (`done` | `error` | `cancelled`)
+  - `summary` (object)
+  - `rawTerminal` (object)
 
-`snapshot_current_chat` and `snapshot_chat_by_id` both use the same streaming pipeline.
+`snapshot_chat_by_id`
 
-Lifecycle:
+- Input:
+  - `conversationId` (string, required)
+  - optional snapshot flags from `snapshot_current_chat`
+- Output:
+  - same shape as `snapshot_current_chat`
+- Additional mapped error:
+  - `TARGET_MISMATCH` when surfaced by bridge
 
-1. Start snapshot via `POST /snapshots` and capture `requestId`.
-2. Open SSE stream via `GET /snapshots/{requestId}/events`.
-3. Relay lifecycle events to MCP client with deterministic transitions:
-   - `SNAPSHOT_STARTED`
-   - zero or more `CHUNK`
-   - terminal `DONE` or terminal `ERROR`
+`cancel_snapshot`
 
-Robustness requirements:
+- Input:
+  - `requestId` (string, required)
+- Output:
+  - `requestId` (string)
+  - `status` (`sent` | `already_terminal`)
+  - `raw` (object, optional)
 
-- tolerate SSE keepalive comments
-- enforce operation timeout and stream-idle timeout with explicit error reasons
-- guarantee single terminal outcome per request
-- relay caller cancellation to bridge `cancel` path
-- clean up in-flight resources on shutdown/interruption
+`teams_api_call`
 
-## 8) Proposed Wrapper Module Layout
+- Input:
+  - `method` (string, required)
+  - `endpoint` (string, required)
+  - optional `query` (object)
+  - optional `body` (object)
+- Output:
+  - `requestId` (string | null)
+  - `status` (integer)
+  - `data` (string | object | null)
+  - `error` (object | null)
+  - `raw` (object, optional)
 
-- `mcp_wrapper/server.py` - MCP server bootstrap and transport wiring
-- `mcp_wrapper/config.py` - configuration model and startup validation
-- `mcp_wrapper/bridge_client.py` - HTTP/SSE bridge client
-- `mcp_wrapper/tools.py` - MCP tool handlers and orchestration
-- `mcp_wrapper/streaming.py` - SSE event parser and stream lifecycle helpers
-- `mcp_wrapper/errors.py` - canonical error mapping and exception types
-- `mcp_wrapper/models.py` - tool input/output models
+Cross-tool guidance:
+
+- return structured content for machine readability
+- optionally include text summary content for compatibility
+- surface `requestId` when available
+
+## 9) Progress and Streaming Strategy
+
+Snapshot operations are long-running and should use MCP progress semantics.
+
+Plan:
+
+- client request includes progress token when supported
+- wrapper emits `notifications/progress` updates during snapshot lifecycle
+- progress updates map bridge SSE events (`SNAPSHOT_STARTED`, `CHUNK`, `DONE`/`ERROR`) into monotonic progress state
+- final tool response remains a single terminal tool result
+
+Do not rely on custom non-standard tool event channels as the primary mechanism.
+
+## 10) Cancellation Strategy
+
+Two cancellation paths must coexist:
+
+1. MCP protocol cancellation (`notifications/cancelled`) for in-flight tool calls
+2. Business tool cancellation (`cancel_snapshot`) for explicit user intent
+
+Mapping rule for in-flight snapshots:
+
+- on MCP cancellation, wrapper should relay bridge cancel where applicable
+- wrapper should stop further processing and free resources
+- wrapper must handle cancellation races safely
+
+## 11) Error Handling Model
+
+Use both MCP error layers correctly:
+
+- protocol/JSON-RPC errors for invalid method, invalid params, malformed requests, and transport/lifecycle failures
+- tool execution errors for business/runtime failures in otherwise valid tool calls
+
+Bridge-originating error codes to preserve and map consistently:
+
+- `BUSY`
+- `CONTEXT_LOST`
+- `DISCONNECTED`
+- `TIMEOUT`
+- `UNSUPPORTED`
+- `TARGET_MISMATCH` (targeted snapshot path)
+
+Error responses should preserve upstream details without leaking sensitive content.
+
+## 12) Diagnostics Surface Decision
+
+Operational data (`bridge_status`, `extension_health`, `extension_logs`) should be exposed with minimal duplication.
+
+Decision order:
+
+1. if client supports resources well, expose read-only diagnostics as resources
+2. otherwise expose as secondary tools with strict read-only behavior
+
+This keeps business tools primary and diagnostics available without expanding core surface unnecessarily.
+
+## 13) Security and Trust Controls
+
+Wrapper must follow MCP transport security guidance and repository local-only posture.
+
+Required controls:
+
+- validate `Origin` on Streamable HTTP requests
+- bind localhost by default
+- add configurable authentication boundary when non-local access is intentionally enabled
+- do not log raw sensitive chat content by default
+- sanitize diagnostic and error payload logging
+
+## 14) Proposed Wrapper Module Layout
+
+- `mcp_wrapper/server.py` - MCP lifecycle, transport endpoint, capability declaration
+- `mcp_wrapper/config.py` - configuration and startup validation
+- `mcp_wrapper/bridge_client.py` - bridge HTTP/SSE client
+- `mcp_wrapper/tools.py` - tool handlers
+- `mcp_wrapper/streaming.py` - SSE-to-progress translation and lifecycle helpers
+- `mcp_wrapper/errors.py` - protocol/tool error mapping utilities
+- `mcp_wrapper/models.py` - JSON-schema-aligned input/output models
 
 Test layout:
 
+- `tests/mcp_wrapper/test_lifecycle.py`
+- `tests/mcp_wrapper/test_transport_http.py`
 - `tests/mcp_wrapper/test_tools.py`
-- `tests/mcp_wrapper/test_streaming.py`
+- `tests/mcp_wrapper/test_streaming_progress.py`
+- `tests/mcp_wrapper/test_cancellation.py`
 - `tests/mcp_wrapper/test_errors.py`
-- `tests/mcp_wrapper/test_bridge_client.py`
 
-## 9) Phased Delivery Plan
+## 15) Phased Delivery Plan
 
-## Phase A - Wrapper Foundation
+### Phase A - Protocol Foundation
 
 Deliver:
 
-- package scaffold
-- transport bootstrap (HTTP listener)
-- config validation
-- base logging
+- MCP lifecycle and capability negotiation
+- Streamable HTTP endpoint semantics
+- protocol version handling
+- base config and logging
 
 Exit criteria:
 
-- wrapper starts cleanly with validated configuration
+- compliant initialize/initialized flow
+- successful `tools/list` and `tools/call` for a minimal smoke tool
 
-## Phase B - Core Business Tools (Non-Streaming)
+### Phase B - Core Business Tools (Non-Streaming)
 
 Deliver:
 
 - `list_conversations`
 - `cancel_snapshot`
 - `teams_api_call`
-- centralized error mapper
+- stable tool schemas and error mapping
 
 Exit criteria:
 
-- deterministic request/response behavior and mapped error outcomes
+- deterministic behavior for success and mapped failures
 
-## Phase C - Snapshot Streaming Tools
+### Phase C - Snapshot Tools with Progress
 
 Deliver:
 
 - `snapshot_current_chat`
 - `snapshot_chat_by_id`
-- streaming lifecycle handling, timeout handling, cancellation relay
+- SSE-to-progress updates
+- cancellation relay and race-safe cleanup
 
 Exit criteria:
 
-- real incremental stream observed on connected extension
-- deterministic completion behavior for success, cancel, and failure
+- long-running operations emit coherent progress and deterministic terminal result
 
-## Phase D - Diagnostics Tools
+### Phase D - Diagnostics Surface
 
 Deliver:
 
-- `bridge_status`
-- `extension_health`
-- `extension_logs`
+- secondary diagnostics exposure as resources or tools (per decision in Section 12)
 
 Exit criteria:
 
-- useful operational diagnostics without sensitive overexposure in logs
+- read-only diagnostics available with bounded/sanitized output
 
-## Phase E - Hardening and Release Readiness
+### Phase E - Hardening and Release Readiness
 
 Deliver:
 
-- focused unit/integration coverage
-- operator runbook and troubleshooting notes
-- compatibility notes for wrapper + bridge + companion extension refs
+- protocol conformance checks
+- integration validation against running bridge + companion extension
+- operator runbook for WSL/Windows local deployment
 
 Exit criteria:
 
-- repeatable local validation and stable behavior under expected failure paths
+- stable behavior across expected happy/error/cancel paths
 
-## 10) Test Strategy
+## 16) Test and Verification Strategy
 
-### 10.1 Unit Tests
+### 16.1 Protocol Conformance Tests
 
-- tool input validation
-- error mapping matrix
-- SSE parse and terminal-state handling
-- cancellation and timeout behavior
+- initialize/version negotiation paths
+- capability declarations
+- Streamable HTTP request/response behavior
+- protocol-level cancellation behavior
 
-### 10.2 Integration Tests
+### 16.2 Tool Contract Tests
 
-- wrapper against running bridge
+- `inputSchema` validation paths
+- `outputSchema` conformance (where declared)
+- tool result error handling (`isError` semantics)
+
+### 16.3 Integration Tests
+
+- wrapper against real bridge runtime
 - business tool happy paths
-- forced error scenarios: `BUSY`, `DISCONNECTED`, `CONTEXT_LOST`, timeout
-- streaming success/cancel/error flows
+- mapped failure scenarios (`BUSY`, `DISCONNECTED`, `CONTEXT_LOST`, timeout, `TARGET_MISMATCH`)
+- snapshot progress and terminal outcomes
 
-### 10.3 Manual Smoke
+### 16.4 Manual Smoke
 
-- MCP client invokes each required business tool successfully
-- snapshot stream arrives incrementally and terminates deterministically
-- API call wrapper returns preserved upstream status/data/error structure
+- MCP client invokes all required business tools
+- snapshot tools produce useful incremental progress and deterministic completion
+- API wrapper preserves upstream status/data/error shape
 
-## 11) Security and Data Handling
+## 17) Risks and Mitigations
 
-Wrapper must inherit bridge local-only posture by default.
-
-Guardrails:
-
-- do not log sensitive chat payloads by default
-- keep diagnostics output deliberate and bounded
-- document that snapshots, logs, and status can contain sensitive metadata/content
-
-## 12) Risks and Mitigations
-
-- Contract drift between bridge and extension:
+- Transport drift from MCP semantics:
+  - mitigate with protocol conformance tests and explicit transport checklist
+- Bridge/extension behavioral drift:
   - mitigate with compatibility notes and integration smoke gates
-- Over-normalization risk in wrapper:
-  - mitigate by preserving payload fidelity and avoiding deep schema translation
-- Streaming edge cases (disconnect mid-flight):
-  - mitigate with strict terminal-state rules and cleanup logic
+- Over-normalization in wrapper:
+  - mitigate by preserving payload fidelity and avoiding deep domain remapping
 
-## 13) Out of Scope
+## 18) Out of Scope (This Iteration)
 
-- bridge protocol redesign
+- bridge runtime/protocol redesign
 - bridge core concurrency model changes
 - bridge authentication redesign
-- remote multi-tenant deployment model
+- remote multi-tenant deployment architecture
 
-## 14) Definition of Done
+## 19) Definition of Done
 
 MCP wrapper delivery is complete when:
 
-- all required business tools are implemented and documented
-- streaming snapshot tools are robust for success/cancel/failure paths
-- error mapping is deterministic and tested
-- architecture boundaries remain intact (wrapper only uses bridge northbound API)
-- verification suite and manual smoke criteria pass
+- required business tools are implemented with documented MCP schemas
+- wrapper satisfies MCP lifecycle and Streamable HTTP baseline behavior
+- snapshot tools provide progress updates and deterministic terminal outcomes
+- cancellation and error mapping are robust and tested
+- architecture boundaries are preserved (wrapper only calls bridge northbound API)
+- integration and manual smoke criteria pass
