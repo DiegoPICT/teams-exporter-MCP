@@ -19,6 +19,14 @@ Canonical dependency context for the companion extension is documented in `docs/
 3. The bridge validates the protocol version and responds with `HELLO_ACK`.
 4. Session metadata from `HELLO.payload` becomes the active bound context.
 
+## Keepalive and Connection Liveness
+
+To prevent Chromium from terminating the Manifest V3 background service worker due to inactivity, the connection implements a **bi-directional keepalive** heartbeat:
+- **Client to Bridge:** The extension sends a `PING` frame every 15 seconds. The bridge responds with a `PONG` frame.
+- **Bridge to Client:** If the bridge detects no incoming frames for 15 seconds, it proactively sends a `PING` frame to the extension. The extension replies with a `PONG` frame.
+
+This continuous exchange of native network events reliably resets the browser's 30-second idle timer, preserving the connection.
+
 ## Frame Envelope
 
 Frames are JSON objects with a common envelope:
@@ -44,6 +52,8 @@ Bridge to extension commands:
 - `GET_LOGS`
 - `HEALTH`
 - `API_CALL`
+- `PING`
+- `PONG`
 
 Extension to bridge responses and events:
 
@@ -55,6 +65,8 @@ Extension to bridge responses and events:
 - `HEALTH_RESULT`
 - `API_RESULT`
 - `ERROR`
+- `PING`
+- `PONG`
 
 These frame expectations are defined by the bridge-companion pairing and are not claimed to be cross-fork universal.
 

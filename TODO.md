@@ -30,8 +30,4 @@ This file tracks parked improvements that are intentionally not being implemente
 ## Product and Protocol Work
 
 - Add MCP adapter work when the code freeze is lifted.
-- Revisit disconnect and reconnect behavior once feature work resumes:
-  - **Client-Side Keepalive Heartbeat:** Implement a periodic 15-20 second `PING` frame sent by the companion extension over the WebSocket. The bridge should either handle this as a keepalive tick or ignore it gracefully to prevent MV3 background service worker termination.
-  - **Persistent Connection Intent:** Save the active connection state (`mcpConnectionIntent`) in `chrome.storage.local` within the extension background script. On startup, read the storage and auto-reconnect if connection was active, preventing desynchronization on worker restart.
-  - **Alarms-Based Self-Healing:** Establish a 1-minute chrome alarm to periodically wake up the worker, inspect the connection state, and automatically rebuild/re-authenticate the socket if it dropped unexpectedly.
 - Revisit protocol ergonomics and error semantics after automated coverage exists.
