@@ -6,6 +6,40 @@
 - Scope: MCP wrapper only
 - Bridge constraint: bridge runtime and contracts are established for this iteration; no bridge code changes
 
+## Current Implementation State (2026-06-29)
+
+Implemented now:
+
+- Phase A foundation is in place:
+  - MCP lifecycle baseline (`initialize`, `notifications/initialized`)
+  - protocol version negotiation and session header enforcement
+  - `tools/list` and `tools/call` transport flow
+  - Streamable HTTP single endpoint shape (`POST` with `GET` returning `405`)
+- Wrapper-managed stack supervision is in place:
+  - wrapper can attach to an already-running bridge
+  - wrapper can launch bridge as a subprocess when unavailable
+  - wrapper tracks bridge runtime state and can auto-restart on crash
+- Implemented MCP tools currently available:
+  - `wrapper_status` (smoke/status)
+  - `snapshot_current_chat` (returns terminal summary including first/last message)
+- Initial automated tests exist for lifecycle and HTTP transport baseline.
+
+Not implemented yet (planned next):
+
+- Phase B business tools:
+  - `list_conversations`
+  - `cancel_snapshot`
+  - `teams_api_call`
+- Remaining Phase C scope:
+  - `snapshot_chat_by_id`
+  - protocol-level progress notifications for long-running operations
+  - cancellation relay behavior for MCP `notifications/cancelled`
+- Planned module decomposition still pending:
+  - `mcp_wrapper/bridge_client.py`
+  - `mcp_wrapper/streaming.py`
+  - `mcp_wrapper/errors.py`
+  - `mcp_wrapper/models.py`
+
 ## 1) Purpose and Constraints
 
 This repository now treats MCP as the primary consumer-facing interface. The MCP wrapper must expose bridge business capabilities while preserving strict architectural boundaries.
