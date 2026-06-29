@@ -30,5 +30,4 @@ This file tracks parked improvements that are intentionally not being implemente
 ## Product and Protocol Work
 
 - Add MCP adapter work when the code freeze is lifted.
-- Revisit disconnect and reconnect behavior once feature work resumes.
 - Revisit protocol ergonomics and error semantics after automated coverage exists.
