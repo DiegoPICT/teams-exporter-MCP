@@ -2,12 +2,14 @@
 
 ## Purpose
 
-The bridge separates two interfaces:
+The bridge separates two primary interfaces:
 
 - a southbound WebSocket connection used by an extension-side client
-- a northbound HTTP API used by local tools, scripts, or future adapters
+- a northbound HTTP API used as the local substrate for tools and adapters
 
 The core bridge service sits between those interfaces and owns session state, operation state, correlation, and lifecycle handling.
+
+The intended consumer-facing layer is an MCP wrapper that calls the northbound HTTP/SSE API rather than bridge internals.
 
 See `docs/companion-project.md` for the canonical bridge-to-extension dependency anchor.
 
@@ -18,7 +20,8 @@ flowchart LR
     EXT[Extension-side client] <-- WebSocket --> WS[Southbound adapter]
     WS <--> CORE[Bridge service]
     CORE <--> API[Northbound HTTP API]
-    API <--> TOOL[Local tools and scripts]
+    API <--> MCP[MCP wrapper]
+    MCP <--> TOOL[LLM and local MCP clients]
 ```
 
 ## Current Boundaries
@@ -39,6 +42,8 @@ flowchart LR
 
 ## Current Intent
 
-The repository is being prepared for public consumption without changing runtime behavior. Design follow-ups and implementation gaps are tracked in `KNOWN_ISSUES.md` and `TODO.md`.
+The bridge runtime remains intentionally stable as the protocol/state substrate for the companion extension.
+
+Active design and implementation work is focused on the MCP wrapper layer, tracked in `docs/mcp-wrapper-implementation-plan.md`.
 
 The bridge remains intentionally coupled to the companion extension branch documented in `docs/companion-project.md`.

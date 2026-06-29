@@ -1,6 +1,6 @@
 # Known Issues
 
-This repository is intentionally documenting current limitations instead of addressing them during the current code-freeze phase.
+This repository documents current limitations while bridge-runtime hardening and MCP-wrapper delivery proceed in staged phases.
 
 ## Security Model
 

@@ -8,9 +8,9 @@ This repository does not include the extension implementation itself.
 
 ## Status
 
-- The runtime is currently in code-freeze mode.
-- Current work is limited to repository hygiene, documentation, and public-release hardening.
-- Technical limitations are documented in `KNOWN_ISSUES.md` and `TODO.md` instead of being addressed in code during this phase.
+- The bridge runtime remains the protocol/state substrate for the companion extension.
+- Current active development focus is the MCP wrapper layer described in `docs/mcp-wrapper-implementation-plan.md`.
+- Runtime limitations and hardening gaps are tracked in `KNOWN_ISSUES.md` and `TODO.md`.
 
 ## Companion Project Dependency
 
@@ -75,6 +75,7 @@ Operations:
 - `docs/architecture.md`: high-level system boundaries and data flow
 - `docs/northbound-api.md`: local HTTP API summary
 - `docs/southbound-protocol.md`: WebSocket protocol summary and state model
+- `docs/mcp-wrapper-implementation-plan.md`: canonical implementation plan for the MCP-facing wrapper
 - `docs/development-testing.md`: local development and manual testing notes
 - `KNOWN_ISSUES.md`: current limitations and public caveats
 - `TODO.md`: parked improvements and future hardening work
@@ -101,7 +102,7 @@ Historical implementation notes remain under `docs/archive/` as non-canonical re
 
 ## Contributing
 
-See `CONTRIBUTING.md` before opening a pull request. During the current code freeze, docs, security hygiene, and repo presentation improvements are preferred over runtime changes.
+See `CONTRIBUTING.md` before opening a pull request. Keep architecture boundaries intact: bridge core remains the transport/state substrate, and MCP-facing behavior should be implemented in the wrapper layer.
 
 ## Disclaimer
 

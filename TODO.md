@@ -1,6 +1,6 @@
 # TODO
 
-This file tracks parked improvements that are intentionally not being implemented during the current cleanup phase.
+This file tracks parked improvements that are intentionally not being implemented in the current implementation window.
 
 ## Security and Hardening
 
@@ -29,5 +29,5 @@ This file tracks parked improvements that are intentionally not being implemente
 
 ## Product and Protocol Work
 
-- Add MCP adapter work when the code freeze is lifted.
+- Implement MCP wrapper delivery phases defined in `docs/mcp-wrapper-implementation-plan.md`.
 - Revisit protocol ergonomics and error semantics after automated coverage exists.
